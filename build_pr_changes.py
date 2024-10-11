@@ -428,6 +428,7 @@ def get_specs_to_check(args) -> List[str]:
     new_variants: List[str] = []
     new_versions: List[str] = []
     next_line_is_version = False
+    next_line_is_variant = False
 
     # The most reliable way to get the PR diff is to use the GitHub CLI:
     err, stdout, stderr = run(["gh", "pr", "diff"])
@@ -439,6 +440,7 @@ def get_specs_to_check(args) -> List[str]:
         if line.startswith("diff --git"):
             add_recipe_variant_version(specs, changed_recipe, new_variants, new_versions)
             next_line_is_version = False
+            next_line_is_variant = False
             continue
         if line[0] != "+":
             continue
@@ -448,11 +450,11 @@ def get_specs_to_check(args) -> List[str]:
             continue
 
         # Get the list of new and changed versions from the PR diff:
-        version_start = re.search(r"version\($", line)
+        version_start = re.search(r"    version\($", line)  # version(
         if version_start:
             next_line_is_version = True
             continue
-        version = re.search(r'version\("([^"]+)", ', line)
+        version = re.search(r'    version\("([^"]+)", ', line)  # version("version",
         if next_line_is_version or version:
             next_line_is_version = False
             version = version or re.search(r'"([^"]+)"', line)
@@ -460,20 +462,20 @@ def get_specs_to_check(args) -> List[str]:
                 new_versions.append(version.group(1))
             continue
 
-        # Get the list of new or changed variant from the PR diff:
-        # TODO: Add support for wrapping the variant in single quotes and on the next line.
-        # TODO: Add support for multi variants.
-        # or, better:
-        # TODO: Add support for getting the list of new and changed variants from spack:
-        # FIXME: Needs fixing, as it does not work yet when variants have a description:
-        variant = re.search(r'variant\("([^"]+)", ', line)
-        if variant:
-            # Add the variant to the specs to build:
-            # TODO: Add support for variants with values.
-            # TODO: Get the default value of the variant from the recipe.
-            # if the default is false, add the variant with a plus sign.
-            variant_str = variant.group(1)
-            new_variants.append(variant_str)
+        # Get the list of new or changed variants from the PR diff:
+        # TODO: Add support for multi variants/variants with values
+        # search for variant( where on its own line, and then search for the variant name.
+        variant_start = re.search(r"    variant\($", line)  # variant(
+        if variant_start:
+            next_line_is_variant = True
+            continue
+        variant = re.search(r'    variant\("([^"]+)", ', line)  # variant("name",
+        if next_line_is_variant or variant:
+            next_line_is_variant = False
+            variant = variant or re.search(r'"([^"]+)"', line)
+            if variant:
+                new_variants.append(variant.group(1))
+            continue
 
     add_recipe_variant_version(specs, changed_recipe, new_variants, new_versions)
 

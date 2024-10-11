@@ -53,7 +53,7 @@ max-locals = 17
 
 # Maximum number of statements in function / method body.
 # defaults to: max-statements=50
-max-statements = 47
+max-statements = 50
 
 # Maximum number of lines in a module.
 # defaults to: max-module-lines=1000
