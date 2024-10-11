@@ -414,29 +414,6 @@ def check_for_recipe(line, changed_files, changed_recipe, recipes):
             changed_recipe[0] = ""
 
 
-def add_recipe_variant_version(specs, changed_recipe, new_variants, new_versions):
-    """Add the recipe, variants, and versions to the specs to check."""
-
-    # Add the matrix of variants and versions to the specs to check:
-    if changed_recipe[0] and new_variants and new_versions:
-        for variant in new_variants:
-            for version in new_versions:
-                specs.append(changed_recipe[0] + variant + "@" + version)
-    elif changed_recipe[0] and new_variants:
-        for variant in new_variants:
-            specs.append(changed_recipe[0] + variant)
-    elif changed_recipe[0] and new_versions:
-        for version in new_versions:
-            specs.append(changed_recipe[0] + "@" + version)
-    elif changed_recipe[0]:
-        print("Adding recipe (found no changed variants or versions):", changed_recipe[0])
-        specs.append(changed_recipe[0])
-
-    new_variants.clear()
-    new_versions.clear()
-    changed_recipe[0] = ""
-
-
 # Of course, this diff parser is not perfect, and should be a class, but it's a start.
 def get_specs_to_check(args) -> List[str]:
     """Check if the current branch is up-to-date with the remote branch.
@@ -495,7 +472,7 @@ def get_specs_to_check(args) -> List[str]:
             # TODO: Add support for variants with values.
             # TODO: Get the default value of the variant from the recipe.
             # if the default is false, add the variant with a plus sign.
-            variant_str = "+" + variant.group(1)
+            variant_str = variant.group(1)
             new_variants.append(variant_str)
 
     add_recipe_variant_version(specs, changed_recipe, new_variants, new_versions)
@@ -505,6 +482,101 @@ def get_specs_to_check(args) -> List[str]:
         print("Changed recipes:", recipes)
         print("Specs to check:", specs)
     return specs
+
+
+def merge_variants(changed_recipe, variant, default_variants):
+    """Merge the variants with the recipe and return the recipe with the variants."""
+
+    default_variants_disable = "".join(["~" + variant for variant in default_variants])
+    recipe_with_variants = changed_recipe[0] + default_variants_disable
+
+    if variant in default_variants:
+        # If the variant is in the default variants, remove it from the spec:
+        recipe_with_variants = recipe_with_variants.replace("~" + variant, "")
+    else:
+        # Add the variant to the recipe:
+        recipe_with_variants += f"{variant}" if variant.startswith("~") else f"+{variant}"
+
+    return recipe_with_variants
+
+
+def add_recipe_variant_version(specs, changed_recipe, new_variants, new_versions):
+    """Add the recipe, variants, and versions to the specs to check."""
+    if not changed_recipe[0]:
+        return
+
+    variants = {}
+    if new_variants:
+        ret, variants = parse_variant_infos(changed_recipe[0])
+        if ret:
+            print("Error getting variants of", changed_recipe[0])
+            # return
+
+    # Add the recipe with the default variants disabled (that are true) to the specs to check:
+    # If the recipe has no variants, add the recipe without variants.
+    # Get the list of variants that are true by default:
+    default_variants = [variant for variant, value in variants.items() if value == "true"]
+    # Prepend ~ to all default variants to disable them.
+    default_variants_disable = "".join(["~" + variant for variant in default_variants])
+
+    # Add the matrix of variants and versions to the specs to check:
+    if new_variants and new_versions:
+        # Add the recipe with the default variants disabled (that are true) to the specs to check:
+        # print("Adding recipe with variants and versions:", changed_recipe[0])
+        # print("Variants:", new_variants)
+        # print("Versions:", new_versions)
+        # print("Default variants:", default_variants)
+        # print("Adding recipe with default variants disabled:", default_variants_disable)
+        for variant in new_variants:
+            # If the variant is not in the default variants, add it,
+            # and remove the default variants from the recipe.
+            recipe_with_variants = merge_variants(changed_recipe, variant, default_variants)
+            for version in new_versions:
+                specs.append(recipe_with_variants + "@" + version)
+
+    elif new_variants:
+        # Add the recipe with the default variants disabled (that are true) to the specs to check:
+        specs.append(f"{changed_recipe[0]}{default_variants_disable}")
+
+        for variant in new_variants:
+            # If the variant is not in the default variants, add it,
+            # and remove the default variants from the recipe.
+            specs.append(merge_variants(changed_recipe, variant, default_variants))
+
+    elif new_versions:
+        for version in new_versions:
+            specs.append(changed_recipe[0] + "@" + version)
+    else:
+        print("Adding recipe (found no changed variants or versions):", changed_recipe[0])
+        if variants:
+            specs.extend([changed_recipe[0] + default_variants_disable, changed_recipe[0]])
+        else:
+            specs.append(changed_recipe[0])
+
+    new_variants.clear()
+    new_versions.clear()
+    changed_recipe[0] = ""
+
+
+def parse_variant_infos(recipe: str) -> Tuple[ExitCode, dict]:
+    """Parse the variants of a recipe and return them as a dictionary."""
+
+    # run spack info --variants-by-name <recipe> to get the variants and their default values
+    ret, stdout, stderr = run(["bin/spack", "info", "--variants-by-name", recipe])
+    if ret:
+        print(stderr or stdout)
+        return ret, {}
+    # The format of the Variants is:
+    # Variants:
+    #     adios [false]               false, true
+    # Extract the variants and their default values from the output:
+    variants = {}
+    for line in stdout.split("\n"):
+        variant = re.search(r"(\w+) \[(\w+)\]", line)
+        if variant:
+            variants[variant.group(1)] = variant.group(2)
+
+    return Success, variants
 
 
 def expand_specs_to_check_package_versions(specs_to_check, max_versions) -> List[str]:
@@ -776,6 +848,14 @@ def generate_build_results(installed, passed, failed, about_build_host) -> str:
         build_results += " ".join(cmd) + "\n"
         err, stdout, stderr = run(cmd)
         if not err:
+            # Filter out the build system and build type from the output:
+            stdout = stdout.replace(" build_system=pip", "")
+            stdout = stdout.replace(" build_system=perl", "")
+            stdout = stdout.replace(" build_system=cmake", "")
+            stdout = stdout.replace(" build_type=Release", "")
+            stdout = stdout.replace(" generator=make", "")
+            # Remove disabled variants (words following ~) in the stdout:
+            stdout = re.sub(r"~[a-z0-9]+", "", stdout)
             build_results += stdout.replace(" build_system=python_pip", "")
         else:
             build_results += stderr or stdout
