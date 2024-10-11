@@ -976,7 +976,7 @@ def check_approval_and_merge(args, build_results):
             if args.yes or input("Do you really want to approve this PR now? [y/n]: ") == "y":
                 cmd = ["pr", "review", args.pull_request, "--approve", "--body", build_results]
                 exitcode = spawn("gh", cmd)
-                if not exitcode:
+                if exitcode:
                     return exitcode
             else:
                 print("Skipping approval of the PR")
