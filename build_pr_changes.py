@@ -838,6 +838,9 @@ def main(args) -> int:
     if exitcode != Success:
         return exitcode
 
+    if args.bootstrap:
+        return bootstrap_spack()
+
     exitcode = checkout_pr_by_search_query(args)
     if exitcode != Success:
         return exitcode
@@ -850,9 +853,11 @@ def main(args) -> int:
 
     args.pull_request = output
 
-    if args.bootstrap:
-        return bootstrap_spack()
+    return check_and_build(args)
 
+
+def check_and_build(args):
+    """Check the PR changes and build the packages."""
     # Get the specs to check.
     if args.build:
         specs_to_check = args.build.split(",")
