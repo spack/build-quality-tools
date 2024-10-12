@@ -143,7 +143,6 @@ def install_spack_dependencies_on_debian() -> ExitCode:
         "bzip2",  # Compression tool
         "unzip",  # Unzip tool
         ("build-essential", "make"),  # Build tools
-        "black",  # Python code formatter
         "clang",  # C/C++ compiler
         ("llvm-dev", "llvm-config"),  # llvm-config is needed for building mesa
         "curl",  # Download tool
@@ -166,12 +165,13 @@ def install_spack_dependencies_on_debian() -> ExitCode:
             print("Failed to install the optional tooling packages.")
             return error
 
-    # Use pip to install the latest version of pre-commit:
-    if not which("pre-commit"):
-        error = spawn("pipx", ["install", "pre-commit"])
-        if error:
-            print("Failed to install the latest version of pre-commit.")
-            return error
+    # Use pipx to install the latest versions of pre-commit and black:
+    for tool in ["pre-commit", "black"]:
+        if not which(tool):
+            error = spawn("pipx", ["install", tool])
+            if error:
+                print(f"Failed to install the latest version of {tool}.")
+                return error
 
     # If the distribution is new enough to have newer compilers, install them.
     about_build_host, os_name, os_version_id = get_os_info()
