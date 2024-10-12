@@ -139,7 +139,7 @@ def update_apt_package_cache() -> ExitCode:
 def install_spack_dependencies_on_debian() -> ExitCode:
     """Install the dependencies of Spack."""
 
-    # Set the environment variables to avoid some ... interactive prompts
+    # Set the environment variables to avoid some interactive prompts
     os.environ["DEBIAN_FRONTEND"] = "noninteractive"
     os.environ["DEBCONF_NONINTERACTIVE_SEEN"] = "true"
     os.environ["APT_LISTCHANGES_FRONTEND"] = "none"
@@ -148,6 +148,12 @@ def install_spack_dependencies_on_debian() -> ExitCode:
     os.environ["NEEDRESTART_MODE"] = "l"
 
     update_apt_package_cache()
+
+    # Remove needrestart: It inserts a prompt during package installation.
+    exitcode, output = subprocess.getstatusoutput("dpkg-query -l needrestart")
+    if exitcode == 0 and "\nii" in output:
+        print("Removing needrestart to avoid prompts during package installation.")
+        spawn("sudo", ["apt-get", "remove", "-y", "needrestart"])
 
     # Install the required packages and recommended packages for spack
     optional_tools = [
@@ -160,7 +166,8 @@ def install_spack_dependencies_on_debian() -> ExitCode:
         "curl",  # Download tool
         "wget",  # Download tool
         "gh",  # GitHub CLI
-        "pipx",  # GitHub CLI
+        "fzf",  # Fuzzy finder for the shell and the GitHub CLI commands/aliases
+        "pipx",  # Python package manager for tools like pre-commit and black
         ("python3-pip", "pip3"),  # Python package manager
     ]
     tools = []
