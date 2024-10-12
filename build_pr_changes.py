@@ -91,17 +91,18 @@ def spawn(command: str, args, logfile=None) -> ExitCode:
 
     signal.signal(signal.SIGWINCH, change_window_size_signal_passthrough)
 
-    def filter_suspended_output(data: bytes) -> bytes:
-        """Filter out suspend output(Ctrl-Z), which stops output but isn't resumed properly"""
-        if b"\x1a" in data:
-            print("\nUse Ctrl-S to stop output, and Ctrl-Q to resume instead of Ctrl-Z.")
-        return data.replace(b"\x1a", b"")
+    # Disabled as it blocks interrupting the process:
+    # def filter_suspended_output(data: bytes) -> bytes:
+    #     """Filter out suspend output(Ctrl-Z), which stops output but isn't resumed properly"""
+    #     if b"\x1a" in data:
+    #         print("\nUse Ctrl-S to stop output, and Ctrl-Q to resume instead of Ctrl-Z.")
+    #     return data.replace(b"\x1a", b"")
 
     child.interact(
         # The type annotation is wrong in pexpect, it should be str | None, not str:
         escape_character=None,  # type:ignore # pyright: ignore[reportArgumentType]
         # The type annotation is wrong in pexpect, it should be func(bytes) -> bytes:
-        input_filter=filter_suspended_output,  # pyright: ignore[reportArgumentType]
+        # input_filter=filter_suspended_output,  # pyright: ignore[reportArgumentType]
     )
 
     child.expect(pexpect.EOF)
