@@ -907,6 +907,12 @@ def failure_summary(fails: List[Tuple[str, str]]) -> str:
             lines = log.readlines()
             # Print one line before lines with the error marker as well:
             previous_line = ""
+            # TODO: Catch CMake errors and show the error message in the summary:
+            # Example of a cmake error:
+            # CMake Error at cmake_files/dependencies.cmake:35 (message):
+            #  SOPT built without ONNXrt support
+            # Call Stack (most recent call first):
+            #  CMakeLists.txt:40 (include)
             for line in lines:
                 if r"[0;91m>> " in line:  # Match the color code and error marker.
                     fails_summary += previous_line
