@@ -681,7 +681,7 @@ def spack_install(specs, args) -> Tuple[List[str], List[Tuple[str, str]]]:
         # TODO: Add support for installing the packages in a container, sandbox, or remote host.
         # TODO: Concertize the the spec before installing to record the exact dependencies.
 
-        cmd = ["install", "-v", "--fail-fast", spec]
+        cmd = ["install", "-v", "--fail-fast", "--deprecated", spec]
         cmd += ["^" + dep for dep in args.dependencies.split(",")] if args.dependencies else []
 
         install_log_filename = f"spack-builder-{spec}.log"
