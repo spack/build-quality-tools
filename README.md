@@ -10,8 +10,28 @@ Quick start:
 - Run `gh pr checkout <PR number>` for checking out a PR to review.
 - Run `gh pr review --approve -b "Tested in my environment"` to approve a PR
 - Run `gh pr merge --auto --squash` to merge it (enables auto-merge if not ready yet)
+- Get a list of PRs that need review, are not drafts, have no assignee, are not failed
+  do not have a number o labels, are not reviewed by me and have maximum comment:
+
+  ```py
+  gh pr list -L9 --search 'review:required draft:false no:assignee -status:failure -label:changes-requested -label:waiting-on-maintainer -label:waiting-on-dependency -label:question'`
+  ```
 
 ## 📝 Tools for checking pull request quality
+
+### Helpful shortcuts (aliases) for `gh`
+
+- `co`: Checkout a PR branch using fzf (select from list)
+
+  ```py
+  gh alias set co --shell 'id="$(gh pr list -L60 | fzf | cut -f1)"; [ -n "$id" ] && gh pr checkout "$id"'
+  ```
+
+- `review`: Find and check PRs that need review
+
+  ```py
+  gh alias set review --shell 'id="$(gh pr list -L20 -S "review:required draft:false no:assignee -status:failure -label:changes-requested -label:waiting-on-maintainer -label:waiting-on-dependency"|fzf|cut -f1)"; [ -n "$id" ] && gh pr checkout $id && gh pr view -c && gh pr diff'
+  ```
 
 ### ⚡️ [`build_pr_changes.py`](build_pr_changes.py)
 
