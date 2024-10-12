@@ -931,7 +931,9 @@ def generate_build_results(installed, passed, fails, about_build_host) -> str:
     build_results = f"\nBuild results{about_build_host}:\n```py\n"
     if installed or passed:
         cmd = ["bin/spack", "find", "--variants", *(installed + passed)]
-        build_results += " ".join(cmd) + "\n"
+        build_results += " ".join(cmd)
+        build_results += " | sed 's/~[a-z]*//g;s/ [a-z0-9_]*=[a-zA-Z0-9]*//g'"
+        build_results += "  # Short variants: Hide disabled and value variants\n"
         err, stdout, stderr = run(cmd)
         if not err:
             # Filter out the build system and build type from the output:
