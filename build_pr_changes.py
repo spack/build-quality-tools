@@ -98,11 +98,23 @@ def spawn(command: str, args, logfile=None) -> ExitCode:
     #         print("\nUse Ctrl-S to stop output, and Ctrl-Q to resume instead of Ctrl-Z.")
     #     return data.replace(b"\x1a", b"")
 
+    cwd = os.getcwd().encode()
+
+    def filter_output(data: bytes) -> bytes:
+        """Filter out the output."""
+        # remove '-DCMAKE_.*:STRING=<any text>' from the output:
+        data = re.sub(b"'-DCMAKE_.*:STRING=.*'", b"", data)
+        # remove extra consecutive :: from the output:
+        data = re.sub(b":+", b":", data).replace(b"           :", b"")
+        # remove the current working directory and empty lines from the output:
+        return data.replace(cwd, b"").replace(b"\n:\n", b"\n").replace(b"\n\n", b"\n")
+
     child.interact(
         # The type annotation is wrong in pexpect, it should be str | None, not str:
         escape_character=None,  # type:ignore # pyright: ignore[reportArgumentType]
         # The type annotation is wrong in pexpect, it should be func(bytes) -> bytes:
-        # input_filter=filter_suspended_output,  # pyright: ignore[reportArgumentType]
+        # input_filter=filter_suspended_output,  # type:ignore
+        output_filter=filter_output,  # type:ignore
     )
 
     child.expect(pexpect.EOF)
