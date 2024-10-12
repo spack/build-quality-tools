@@ -450,6 +450,10 @@ def get_specs_to_check(args) -> List[str]:
         if not changed_recipe[0]:
             continue
 
+        # A version with indent by 8 spaces is a version that is likely deprecated:
+        if re.search(r"        version\(", line):
+            continue
+
         # Get the list of new and changed versions from the PR diff:
         version_start = re.search(r"    version\($", line)  # version(
         if version_start:
@@ -618,7 +622,7 @@ def spack_install(specs, args) -> Tuple[List[str], List[Tuple[str, str]]]:
         # TODO: Add support for installing the packages in a container, sandbox, or remote host.
         # TODO: Concertize the the spec before installing to record the exact dependencies.
 
-        cmd = ["install", "-v", "--fail-fast", "--deprecated", "--source", spec]
+        cmd = ["install", "-v", "--fail-fast", spec]
         cmd += ["^" + dep for dep in args.dependencies.split(",")] if args.dependencies else []
 
         install_log_filename = f"spack-builder-{spec}.log"
@@ -671,9 +675,10 @@ def checkout_pr_by_search_query(args: argparse.Namespace) -> ExitCode:
         return Success
 
     # Find the PR number from the PR query:
-    query = f"gh pr list --limit 1 -S '{args.checkout}' --json number -q.[].number"
-    print("Querying for the PR to check out, please wait a second or so:")
-    exitcode, number = subprocess.getstatusoutput(query)
+    query = f"in:title draft:false -review:changes_requested {args.checkout}"
+    find_pr = f"gh pr list --limit 1 -S '{query}' "
+    print("Querying for the PR to check out, please wait a second or so:\n" + find_pr)
+    exitcode, number = subprocess.getstatusoutput(f"{find_pr} --json number -q.[].number")
     if exitcode != 0 or not number:
         print(f"Failed to find the PR by querying for '{args.checkout}'\n" + number)
         return exitcode or 1
