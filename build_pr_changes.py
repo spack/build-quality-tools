@@ -755,13 +755,8 @@ def checkout_pr_by_search_query(args: argparse.Namespace) -> ExitCode:
     # Show the changes in the PR:
     spawn("gh", ["pr", "diff", str(number)])
 
-    # Clean the python and misc cache files:
-    exitcode, output = subprocess.getstatusoutput("bin/spack clean --misc-cache --python-cache")
-    if exitcode != 0:
-        print("Failed to clean the cache:", output)
-        return exitcode
-    print("Cleaned the python and the misc caches")
-    return Success
+    # Clean the misc cache and the staging directory:
+    return spawn("bin/spack", ["clean", "--misc-cache", "--stage"])
 
 
 def parse_args() -> argparse.Namespace:
