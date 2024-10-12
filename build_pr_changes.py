@@ -743,18 +743,17 @@ def checkout_pr_by_search_query(args: argparse.Namespace) -> ExitCode:
         return exitcode or 1
 
     # View the information about the PR:
-    exitcode, output = subprocess.getstatusoutput(f"gh pr view {number}")
-    if exitcode != 0:
-        print("Failed to view the PR:", output)
-        return exitcode
-    print(f'Found PR for "{args.checkout}":')
-    print(output)
+    spawn("gh", ["pr", "view", str(number)])
+
     # Checkout the PR branch:
     exitcode, output = subprocess.getstatusoutput(f"gh pr checkout {number}")
     if exitcode != 0:
         print("Failed to checkout the PR branch:", output)
         return exitcode
     print("Checked out the PR branch.")
+
+    # Show the changes in the PR:
+    spawn("gh", ["pr", "diff", str(number)])
 
     # Clean the python and misc cache files:
     exitcode, output = subprocess.getstatusoutput("bin/spack clean --misc-cache --python-cache")
