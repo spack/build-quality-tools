@@ -352,7 +352,47 @@ def bootstrap_spack() -> ExitCode:
         # Is not os-agnostic yet, as it uses the shell:
         spawn("sh", ["-c", f"cd {build_tools_dir} && pre-commit install"])
 
+    err = setup_github_cli_fzf_aliases()
+    if err:
+        return err
+
     return setup_github_cli_dashboard(build_tools_dir)
+
+
+def setup_github_cli_fzf_aliases() -> ExitCode:
+    """Set up the fzf fuzzy finder for the shell and the GitHub CLI commands/aliases."""
+
+    exitcode, _, __ = run(["which", "fzf"])
+    if exitcode:
+        print("fzf is not installed, please install it.")
+        return exitcode
+
+    # Set up the GitHub CLI aliases for checking out PRs:
+    exitcode = spawn(
+        "gh",
+        [
+            "alias",
+            "set",
+            "co",
+            "--shell",
+            'id="$(gh pr list -L60|fzf|cut -f1)"; [ -n "$id" ] && gh pr checkout "$id"',
+        ],
+    )
+    if exitcode:
+        return exitcode
+    return spawn(
+        "gh",
+        [
+            "alias",
+            "set",
+            "review",
+            "--shell",
+            'id="$(gh pr list -L20 -S "review:required draft:false no:assignee'
+            " -status:failure -label:changes-requested -label:waiting-on-maintainer"
+            ' -label:waiting-on-dependency"|fzf|cut -f1)"; [ -n "$id" ]'
+            " && gh pr checkout $id && gh pr view -c && gh pr diff",
+        ],
+    )
 
 
 def get_safe_versions(spec):
