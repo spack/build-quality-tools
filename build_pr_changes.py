@@ -829,6 +829,7 @@ def parse_args() -> argparse.Namespace:
     argparser.add_argument(
         "-d", "--download", action="store_true", help="Download and checksum check only"
     )
+    argparser.add_argument("-q", "--queue", type=str, help="Work on a queue file of PRs to check.")
     argparser.add_argument(
         "-u", "--uninstall", action="store_true", help="Uninstall the installed packages."
     )
@@ -850,6 +851,9 @@ def main(args) -> int:
     if args.bootstrap:
         return bootstrap_spack()
 
+    if args.queue:
+        return check_queue_file(args)
+
     exitcode = checkout_pr_by_search_query(args)
     if exitcode != Success:
         return exitcode
@@ -863,6 +867,18 @@ def main(args) -> int:
     args.pull_request = output
 
     return check_and_build(args)
+
+
+def check_queue_file(args) -> int:
+    """Check the queue file of PRs to check."""
+    with open(args.queue, "r", encoding="utf-8") as queue:
+        for line in queue:
+            print("\nChecking PR:", line)
+            args.checkout = line
+            exitcode = main(args)
+            if exitcode != 0:
+                return exitcode
+    return Success
 
 
 def check_and_build(args):
