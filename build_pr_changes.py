@@ -482,13 +482,16 @@ def get_specs_to_check(args) -> List[str]:
     On errors and if not up-to-date, return an error exit code.
     """
     changed_files: List[str] = []
-    changed_recipe: List[str] = [""]
+    recipe: List[str] = [""]
     recipes: List[str] = []
     specs: List[str] = []
     new_variants: List[str] = []
     new_versions: List[str] = []
+    default_versions = new_versions
+    deprecated: List[str] = []
     next_line_is_version = False
     next_line_is_variant = False
+    version_match = None
 
     # The most reliable way to get the PR diff is to use the GitHub CLI:
     err, stdout, stderr = run(["gh", "pr", "diff"])
@@ -498,19 +501,17 @@ def get_specs_to_check(args) -> List[str]:
 
     for line in stdout.split("\n"):
         if line.startswith("diff --git"):
-            add_recipe_variant_version(specs, changed_recipe, new_variants, new_versions)
+            add_recipe_variant_version(specs, recipe, new_variants, new_versions, deprecated)
             next_line_is_version = False
             next_line_is_variant = False
+            default_versions = new_versions
+            version_match = None
             continue
         if line[0] != "+":
             continue
 
-        check_for_recipe(line, changed_files, changed_recipe, recipes)
-        if not changed_recipe[0]:
-            continue
-
-        # A version with indent by 8 spaces is a version that is likely deprecated:
-        if re.search(r"        version\(", line):
+        check_for_recipe(line, changed_files, recipe, recipes)
+        if not recipe[0]:
             continue
 
         # Get the list of new and changed versions from the PR diff:
@@ -518,12 +519,25 @@ def get_specs_to_check(args) -> List[str]:
         if version_start:
             next_line_is_version = True
             continue
-        version = re.search(r'    version\("([^"]+)", ', line)  # version("version",
-        if next_line_is_version or version:
+        if next_line_is_version:
+            version_match = re.search(r'"([^"]+)"', line)
             next_line_is_version = False
-            version = version or re.search(r'"([^"]+)"', line)
-            if version:
-                new_versions.append(version.group(1))
+            continue
+        if "        deprecated=True," in line and version_match:
+            deprecated.append(version_match.group(1))
+            print("Deprecated versions:", deprecated)
+            version_match = None
+            continue
+        if version_match and "    )" in line:
+            new_versions.append(version_match.group(1))
+            print("New versions:", new_versions)
+
+        if "with default_args(deprecated=True):" in line:
+            default_versions = deprecated
+
+        version = re.search(r'    version\("([^"]+)", ', line)  # version("version",
+        if version:
+            default_versions.append(version.group(1))
             continue
 
         # Get the list of new or changed variants from the PR diff:
@@ -541,7 +555,7 @@ def get_specs_to_check(args) -> List[str]:
                 new_variants.append(variant.group(1))
             continue
 
-    add_recipe_variant_version(specs, changed_recipe, new_variants, new_versions)
+    add_recipe_variant_version(specs, recipe, new_variants, new_versions, deprecated)
 
     if args.verbose:
         print("Changed files:", changed_files)
@@ -566,7 +580,7 @@ def merge_variants(changed_recipe, variant, default_variants):
     return recipe_with_variants
 
 
-def add_recipe_variant_version(specs, changed_recipe, new_variants, new_versions):
+def add_recipe_variant_version(specs, changed_recipe, new_variants, new_versions, deprecated):
     """Add the recipe, variants, and versions to the specs to check."""
     if not changed_recipe[0]:
         return
@@ -621,6 +635,7 @@ def add_recipe_variant_version(specs, changed_recipe, new_variants, new_versions
 
     new_variants.clear()
     new_versions.clear()
+    deprecated.clear()
     changed_recipe[0] = ""
 
 
