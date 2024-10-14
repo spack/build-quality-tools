@@ -273,17 +273,37 @@ def print_version_checks(version_checks):
     return Success
 
 
+def gh_cli_auth_info() -> Tuple[ExitCode, str]:
+    """Get the GitHub CLI authentication information."""
+    return subprocess.getstatusoutput("gh auth status")
+
+
+def get_github_user() -> str:
+    """Get the GitHub user name."""
+
+    exitcode, out = gh_cli_auth_info()
+    if exitcode:
+        return ""
+    # Extract "user" from "Logged in to github.com as user ("config")"
+    user_match = re.search(r"Logged in to github.com as (\w+)", out)
+    if not user_match:
+        print("Failed to get the GitHub user name.")
+        return ""
+    return user_match.group(1)
+
+
 def authenticate_github_cli() -> ExitCode:
     """Authenticate with GitHub, paste the URL in a browser, and paste the one-time code."""
+
     if not which("gh"):  # Don't block use in containers without GitHub CLI using -b <spec>
         return Success
 
     # Check if the user is already authenticated with GitHub.
-    exitcode, out, err = run(["gh", "auth", "status"])
-    if not exitcode:
+    exitcode, out = gh_cli_auth_info()
+    if exitcode == Success:
         return Success
 
-    print(err or out)
+    print(out)
 
     # Authenticate with GitHub.
     print("Please authenticate with GitHub:")
@@ -551,7 +571,9 @@ def get_specs_to_check(args) -> List[str]:
             next_line_is_variant = False
             variant = variant or re.search(r'"([^"]+)"', line)
             if variant:
-                new_variants.append(variant.group(1))
+                variant_str = variant.group(1)
+                if variant_str != "cxxstd":
+                    new_variants.append(variant_str)
             continue
 
     add_recipe_variant_version(specs, recipe, new_variants, new_versions, deprecated)
