@@ -98,7 +98,7 @@ def spawn(command: str, args, logfile=None) -> ExitCode:
     #         print("\nUse Ctrl-S to stop output, and Ctrl-Q to resume instead of Ctrl-Z.")
     #     return data.replace(b"\x1a", b"")
 
-    cwd = os.getcwd().encode()
+    cwd = f"{os.getcwd()}/".encode()
 
     def filter_output(data: bytes) -> bytes:
         """Filter out the output."""
@@ -454,7 +454,7 @@ def run(command: List[str] | str, check=False, show_command=False) -> Tuple[int,
     if show_command:
         print(" ".join(command))
     cmd: subprocess.CompletedProcess[str] = subprocess.run(
-        command, check=check, text=True, capture_output=True, timeout=120
+        command, check=check, text=True, capture_output=True, timeout=240
     )
     return cmd.returncode, cmd.stdout.strip(), cmd.stderr.strip()
 
@@ -530,7 +530,6 @@ def get_specs_to_check(args) -> List[str]:
             continue
         if version_match and "    )" in line:
             new_versions.append(version_match.group(1))
-            print("New versions:", new_versions)
 
         if "with default_args(deprecated=True):" in line:
             default_versions = deprecated
