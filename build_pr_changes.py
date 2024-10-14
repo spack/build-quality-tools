@@ -3,6 +3,7 @@
 # Copyright 2024, Bernhard Kaindl
 # SPDX-License-Identifier: (Apache-2.0 OR MIT)
 import argparse
+import json
 import os
 import re
 import signal
@@ -15,8 +16,9 @@ from glob import glob
 from logging import INFO, basicConfig, info
 from pathlib import Path
 from shutil import which
+from subprocess import getoutput
 from time import sleep
-from typing import List, Tuple, TypeAlias
+from typing import Any, Dict, List, Tuple, TypeAlias
 
 try:
     import pexpect
@@ -938,7 +940,7 @@ def check_and_build(args):
         print("These specs are already installed:")
         print("\n".join(findings))
         if args.uninstall:
-            if input("Uninstall them? [y/n]: ").lower() == "y":
+            if args.yes or input("Uninstall them? [y/n]: ").lower() == "y":
                 spack_uninstall_packages(installed)
                 installed = []
 
@@ -1018,6 +1020,10 @@ def generate_build_results(installed, passed, fails, about_build_host) -> str:
         url = stdout.replace("git@github.com:", "https://github.com/").replace(".git", "")
         build_results += url + "/blob/main/"
     build_results += os.path.basename(__file__) + "\n```py\n" + " ".join(sys.argv) + "\n```"
+
+    # Don't show the full path to the files, and replace the home directory with ~:
+    build_results = build_results.replace(os.getcwd() + "/", "")
+    build_results = build_results.replace(os.path.expanduser("~"), "~")
     return build_results
 
 
@@ -1078,6 +1084,22 @@ def build_and_act_on_results(args, installed, specs_to_check):
     return check_approval_and_merge(args, build_results)
 
 
+def get_pull_request_status(args: argparse.Namespace) -> Dict[str, Any]:
+    """Get the state of the pull request."""
+    if not args.pull_request:
+        assert False, "No pull request number given."
+
+    return json.loads(getoutput(f"gh pr view {args.pull_request} --json state,reviews"))
+
+
+def is_closed_or_merged(pr: Dict[str, Any]) -> bool:
+    """Check if the PR is already merged or closed."""
+
+    pr_state = pr.get("state")
+    assert pr_state, "Failed to get the PR state."
+    return pr_state in ["MERGED", "CLOSED"]
+
+
 def check_approval_and_merge(args, build_results):
     """Check if the PR is/can be approved and merge the PR if all specs passed."""
 
@@ -1085,30 +1107,54 @@ def check_approval_and_merge(args, build_results):
         print("Approve requested, please review the PR diff before merging!")
         spawn("gh", ["pr", "diff"])
         # Check if it is already approved:
-        cmd = ["gh", "pr", "view", args.pull_request, "--json", "state", "-q", ".state"]
-        exitcode, stdout, stderr = run(cmd)
-        if exitcode:
-            print(stderr or stdout)
-            return exitcode
-        if stdout in ["MERGED", "CLOSED"]:
+        # gh pr view 46977 --json reviews,state
+        # {
+        #   "state": "OPEN"
+        #   "reviews": [
+        #     {
+        #       "author": {
+        #         "login": "becker33"
+        #       },
+        #       "authorAssociation": "MEMBER",
+        #       "body": "",
+        #       "submittedAt": "2024-10-14T23:15:56Z",
+        #       "includesCreatedEdit": false,
+        #       "reactionGroups": [],
+        #       "state": "APPROVED"
+        #     }
+        #   ],
+
+        # }
+        # cmd = ["gh", "pr", "view", args.pull_request, "--json", "state", "-q", ".state"]
+
+        pr = get_pull_request_status(args)
+        if is_closed_or_merged(pr):
             print("PR is already merged or closed.")
-            return stdout == "MERGED"
-        exitcode, stdout, stderr = run(
-            ["gh", "pr", "view", "--json", "reviews", "-q", ".reviews[].author.login"]
-        )
-        if exitcode:
-            print(stderr or stdout)
-            return exitcode
-        if stdout:
-            print("PR is already approved.")
-            print("Approved by:", stdout.replace("\n", " "))
+            return Success
+
+        approvers = []
+        for review in pr.get("reviews"):
+            if review["state"] == "APPROVED":
+                approvers.append(review["author"]["login"])
+
+        if approvers:
+            print("Approved  by" + ", ".join(approvers))
+
+        github_user = get_github_user()
+        if not github_user:
+            print("Failed to get the GitHub user.")
+            return 1
+
+        if github_user in approvers:
+            print("Already approved by me, skipping approval and merge.")
+            return Success
 
         print("\nBuild results:\n\n")
         print(build_results + "\n\n")
 
         if (
             args.yes
-            or not stdout
+            or not approvers
             or input("Submit the build results as an approval [y/n]: ") == "y"
         ):
             # Check if the PR is really ready for approval before approving:
