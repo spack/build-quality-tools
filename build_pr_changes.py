@@ -778,21 +778,26 @@ def checkout_pr_by_search_query(args: argparse.Namespace) -> ExitCode:
         print(f"Failed to find the PR by querying for '{args.checkout}'\n" + number)
         return exitcode or 1
 
+    return checkout_pr_by_number(number)
+
+
+def checkout_pr_by_number(pr_number: str) -> ExitCode:
+    """Checkout the PR branch by PR number."""
     # View the information about the PR:
-    spawn("gh", ["pr", "view", str(number)])
+    spawn("gh", ["pr", "view", pr_number])
 
     # Checkout the PR branch:
-    exitcode, output = subprocess.getstatusoutput(f"gh pr checkout {number}")
+    exitcode, output = subprocess.getstatusoutput(f"gh pr checkout {pr_number}")
     if exitcode != 0:
         print("Failed to checkout the PR branch:", output)
         return exitcode
     print("Checked out the PR branch.")
 
     # Show the changes in the PR:
-    spawn("gh", ["pr", "diff", str(number)])
+    spawn("gh", ["pr", "diff", pr_number])
 
-    # Clean the misc cache and the staging directory:
-    return spawn("bin/spack", ["clean", "--misc-cache", "--stage"])
+    # Clean the staging directory (cleaning caches might be nice but causes long delays):
+    return spawn("bin/spack", ["clean", "--stage"])
 
 
 def parse_args() -> argparse.Namespace:
