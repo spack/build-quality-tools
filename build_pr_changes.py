@@ -900,9 +900,21 @@ def main(args) -> int:
 def check_queue_file(args) -> int:
     """Check the queue file of PRs to check."""
     with open(args.queue, "r", encoding="utf-8") as queue:
+        args.queue = None
         for line in queue:
-            print("\nChecking PR:", line)
-            args.checkout = line
+            print("Checking PR:", line)
+            if line.startswith("#"):
+                line = line[1:]
+            pr_number = line.split()[0]
+            ret = checkout_pr_by_number(pr_number)
+            if ret:
+                return ret
+            args.pull_request = str(pr_number)
+            # Check if args.pull_request is already closed or merged:
+            pr = get_pull_request_status(args)
+            if is_closed_or_merged(pr):
+                continue
+
             exitcode = main(args)
             if exitcode != 0:
                 return exitcode
