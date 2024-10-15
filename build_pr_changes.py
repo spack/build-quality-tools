@@ -1036,14 +1036,24 @@ def failure_summary(fails: List[Tuple[str, str]]) -> str:
             #  SOPT built without ONNXrt support
             # Call Stack (most recent call first):
             #  CMakeLists.txt:40 (include)
+            add_remaining_lines = False
             for line in lines:
-                if r"[0;91m>> " in line:  # Match the color code and error marker.
+                if add_remaining_lines:
+                    fails_summary += line
+                    continue
+                # Match the color code and error marker and look for CMake errors:
+                if (
+                    r"[0;91m>> " in line
+                    or "CMake Error" in line
+                    or "errors found in build log" in line
+                ):
                     fails_summary += previous_line
                     fails_summary += line
                     previous_line = ""
+                    add_remaining_lines = True
                 else:
                     previous_line = line
-            fails_summary += ("".join(lines)).strip()
+
         fails_summary += "\n```\n"
         if "failed to concretize" in lines[0]:
             fails_summary += "spack failed to concretize specs due to conflicts.\nThis is"
