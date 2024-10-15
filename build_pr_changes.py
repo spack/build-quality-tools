@@ -9,6 +9,7 @@ import re
 import signal
 import subprocess
 import sys
+import tempfile
 import time
 import traceback
 from io import BytesIO
@@ -138,6 +139,56 @@ def update_apt_package_cache() -> ExitCode:
     return Success
 
 
+def install_github_cli_from_github_debian_repo() -> ExitCode:
+    """Install the GitHub CLI from the GitHub repository."""
+
+    ring = "/etc/apt/trusted.gpg.d/githubcli-archive-keyring.gpg"
+    if not os.path.exists(ring):
+        # The keyring is used to verify the GitHub CLI repository.
+        exit_code = spawn(
+            "sudo",
+            [
+                "wget",
+                "https://cli.github.com/packages/githubcli-archive-keyring.gpg",
+                "-O",
+                "/etc/apt/trusted.gpg.d/githubcli-archive-keyring.gpg",
+            ],
+        )
+        if exit_code:
+            print("Failed to download the GitHub CLI keyring.")
+            return exit_code
+
+    sources = "/etc/apt/sources.list.d/github-cli.list"
+    if not os.path.exists(sources):
+        # save the repo configuration to a temporary file:
+        with tempfile.NamedTemporaryFile(delete=False) as tmp:
+            arch = subprocess.getoutput("dpkg --print-architecture")
+            tmp.write(
+                f"deb [arch={arch} signed-by={ring}]"
+                " https://cli.github.com/packages stable main\n".encode()
+            )
+
+        # Move the temporary file to the final location:
+        exit_code = spawn("sudo", ["mv", "-v", tmp.name, sources])
+        if exit_code:
+            print("Failed to create the GitHub CLI repository configuration.")
+            return exit_code
+
+    # Update the package list:
+    exit_code = spawn("sudo", ["apt-get", "update"])
+    if exit_code:
+        print("Failed to update the package list.")
+        return exit_code
+
+    # Install the GitHub CLI:
+    exit_code = spawn("sudo", ["apt-get", "install", "-y", "gh"])
+    if exit_code:
+        print("Failed to install the optional tooling packages.")
+        return exit_code
+
+    return spawn("sudo", ["apt", "update"])
+
+
 def install_spack_dependencies_on_debian() -> ExitCode:
     """Install the dependencies of Spack."""
 
@@ -167,7 +218,6 @@ def install_spack_dependencies_on_debian() -> ExitCode:
         ("llvm-dev", "llvm-config"),  # llvm-config is needed for building mesa
         "curl",  # Download tool
         "wget",  # Download tool
-        "gh",  # GitHub CLI
         "fzf",  # Fuzzy finder for the shell and the GitHub CLI commands/aliases
         "pipx",  # Python package manager for tools like pre-commit and black
         ("python3-pip", "pip3"),  # Python package manager
@@ -181,18 +231,22 @@ def install_spack_dependencies_on_debian() -> ExitCode:
             if not which(tool):
                 tools.append(tool)
     if tools:
-        error = spawn("sudo", ["apt-get", "install", "-y", *tools])
-        if error:
+        exit_code = spawn("sudo", ["apt-get", "install", "-y", *tools])
+        if exit_code:
             print("Failed to install the optional tooling packages.")
-            return error
+            return exit_code
+
+    exit_code = install_github_cli_from_github_debian_repo()
+    if exit_code:
+        return exit_code
 
     # Use pipx to install the latest versions of pre-commit and black:
     for tool in ["pre-commit", "black"]:
         if not which(tool):
-            error = spawn("pipx", ["install", tool])
-            if error:
+            exit_code = spawn("pipx", ["install", tool])
+            if exit_code:
                 print(f"Failed to install the latest version of {tool}.")
-                return error
+                return exit_code
 
     # If the distribution is new enough to have newer compilers, install them.
     about_build_host, os_name, os_version_id = get_os_info()
@@ -287,11 +341,11 @@ def get_github_user() -> str:
     if exitcode:
         return ""
     # Extract "user" from "Logged in to github.com as user ("config")"
-    user_match = re.search(r"Logged in to github.com as (\w+)", out)
+    user_match = re.search(r"Logged in to github.com (\w+) (\w+)", out)
     if not user_match:
         print("Failed to get the GitHub user name.")
         return ""
-    return user_match.group(1)
+    return user_match.group(2)
 
 
 def authenticate_github_cli() -> ExitCode:
@@ -395,6 +449,7 @@ def setup_github_cli_fzf_aliases() -> ExitCode:
         [
             "alias",
             "set",
+            "--clobber",
             "co",
             "--shell",
             'id="$(gh pr list -L60|fzf|cut -f1)"; [ -n "$id" ] && gh pr checkout "$id"',
@@ -407,6 +462,7 @@ def setup_github_cli_fzf_aliases() -> ExitCode:
         [
             "alias",
             "set",
+            "--clobber",
             "review",
             "--shell",
             'id="$(gh pr list -L20 -S "review:required draft:false no:assignee'
