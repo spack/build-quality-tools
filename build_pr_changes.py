@@ -18,7 +18,6 @@ from logging import INFO, basicConfig, info
 from pathlib import Path
 from shutil import which
 from subprocess import getoutput
-from time import sleep
 from typing import Any, Dict, List, Tuple, TypeAlias
 
 try:
@@ -630,7 +629,7 @@ def get_specs_to_check(args) -> List[str]:
             variant = variant or re.search(r'"([^"]+)"', line)
             if variant:
                 variant_str = variant.group(1)
-                if variant_str != "cxxstd":
+                if variant_str not in ["cxxstd", "cuda"]:
                     new_variants.append(variant_str)
             continue
 
@@ -722,6 +721,7 @@ def parse_variant_infos(recipe: str) -> Tuple[ExitCode, dict]:
     """Parse the variants of a recipe and return them as a dictionary."""
 
     # run spack info --variants-by-name <recipe> to get the variants and their default values
+    # Note: Slightly older versions of spack do not have this and there are PRs from them:
     ret, stdout, stderr = run(["bin/spack", "info", "--variants-by-name", recipe])
     if ret:
         print(stderr or stdout)
@@ -775,7 +775,7 @@ def spack_install(specs, args) -> Tuple[List[str], List[Tuple[str, str]]]:
         # TODO: Add support for installing the packages in a container, sandbox, or remote host.
         # TODO: Concertize the the spec before installing to record the exact dependencies.
 
-        cmd = ["install", "-v", "--fail-fast", "--deprecated", spec]
+        cmd = ["install", "-v", "--fail-fast", spec]
         cmd += ["^" + dep for dep in args.dependencies.split(",")] if args.dependencies else []
 
         install_log_filename = f"spack-builder-{spec}.log"
@@ -789,9 +789,6 @@ def spack_install(specs, args) -> Tuple[List[str], List[Tuple[str, str]]]:
             print(f"\n------------------------- FAILED {spec} -------------------------")
             print("\nFailed command:", " ".join(["bin/spack", *cmd]) + "\n")
             print(f"Log file: {install_log_filename}")
-            # show the last 40 lines of the log file:
-            spawn("tail", ["-n", "40", install_log_filename])
-            sleep(5)
             failed.append((spec, install_log_filename))
 
     return passed, failed
@@ -855,7 +852,7 @@ def checkout_pr_by_number(pr_number: str) -> ExitCode:
     spawn("gh", ["pr", "diff", pr_number])
 
     # Clean the staging directory (cleaning caches might be nice but causes long delays):
-    return spawn("bin/spack", ["clean", "--stage"])
+    return spawn("bin/spack", ["clean", "--stage", "--misc"])
 
 
 def parse_args() -> argparse.Namespace:
@@ -1023,7 +1020,7 @@ def failure_summary(fails: List[Tuple[str, str]]) -> str:
     if not fails:
         return ""
 
-    fails_summary = f"{len(fails)} failed specs:" if len(fails) > 1 else "One failed spec:"
+    fails_summary = f"{len(fails)} failed specs:\n" if len(fails) > 1 else "One failed spec:\n"
     for failed_spec, _ in fails:
         fails_summary += f"- `{failed_spec}`\n"
 
