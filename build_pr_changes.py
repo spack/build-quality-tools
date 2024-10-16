@@ -1,5 +1,16 @@
 #!/usr/bin/env python3
-"""For reviewing pull requests, run `spack install` on recipes changed current PR"""
+"""For reviewing pull requests, run `spack install` on recipes changed current PR
+
+Important TODO:
+run spack maintainers to check for maintainers of the packages.
+Only attempt to merge if the maintainers approved merging the PR.
+
+Important TODO:
+- if the rebase to develop fails, merge develop into the branch and push the branch.
+
+Important TODO:
+Limit the amount of builds, in some, the amount of variants can be hundreds.
+"""
 # Copyright 2024, Bernhard Kaindl
 # SPDX-License-Identifier: (Apache-2.0 OR MIT)
 import argparse
