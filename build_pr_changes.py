@@ -1291,7 +1291,8 @@ def create_change_request(args: argparse.Namespace, build_results: str) -> ExitC
     build_results = re.sub(r"\x1b\[[0-9;]*m", "", build_results)
 
     # spawn("gh", ["issue", "create", "--title", "Fix the failed specs", "--body", build_results])
-    cmd = ["pr", "review", args.pull_request, "--request-changes", "--body", build_results]
+    # cmd = ["pr", "review", args.pull_request, "--request-changes", "--body", build_results]
+    cmd = ["pr", "review", args.pull_request, "--comment", "--body", build_results]
     exitcode = spawn("gh", cmd)
     if exitcode:
         return exitcode
