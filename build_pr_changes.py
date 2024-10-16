@@ -1096,8 +1096,9 @@ def failure_summary(fails: List[Tuple[str, str]]) -> str:
 
         fails_summary += "\n```\n"
         if "failed to concretize" in lines[0]:
-            fails_summary += "spack failed to concretize specs due to conflicts.\nThis is"
-            fails_summary += " likely intentional due to a conflict() in the recipe(s).\n"
+            fails_summary += "spack failed to concretize specs due to conflicts.\nThis may"
+            fails_summary += " be intentional due to a conflict() in the recipe(s):\n"
+            fails_summary += "```py\n" + "\n".join(lines) + "\n```\n"
 
     # TODO: Add support for showing details about the failed specs
     # like used deps (cmake version, openssl version, etc.)
