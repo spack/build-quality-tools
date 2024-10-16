@@ -1032,6 +1032,27 @@ def check_and_build(args):
     return build_and_act_on_results(args, installed, specs_to_check)
 
 
+def head_of_build_log(line: str) -> str:
+    """Return the head of the build log."""
+
+    build_log = line.strip()
+    if not os.path.exists(build_log):
+        return f"Build log not found: {build_log}\n"
+
+    print("Extracting the head of the build log:", build_log)
+    with open(build_log, "r", encoding="utf-8") as build_log_file:
+        head_of_log = "\n```\nBuild log:\n```py\n"
+        for i, log_line in enumerate(build_log_file):
+            if i == 2 or "'-G'" in log_line:
+                continue  # Skip the long cmake command line for now
+            if i > 26:
+                head_of_log += "...\n"
+                break
+            head_of_log += log_line
+
+    return head_of_log
+
+
 def failure_summary(fails: List[Tuple[str, str]]) -> str:
     """Generate a summary of the failed specs."""
     if not fails:
@@ -1047,7 +1068,15 @@ def failure_summary(fails: List[Tuple[str, str]]) -> str:
             lines = log.readlines()
             previous_line = ""
             add_remaining_lines = False
+            next_line_is_build_log = False
             for line in lines:
+                if line == "See build log for details:\n":
+                    next_line_is_build_log = True
+                    continue
+                if next_line_is_build_log:
+                    fails_summary += head_of_build_log(line)
+                    break
+
                 if add_remaining_lines:
                     fails_summary += line
                     continue
