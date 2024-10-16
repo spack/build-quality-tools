@@ -947,13 +947,20 @@ def main(args) -> int:
     if exitcode != Success:
         return exitcode
 
+    return check_pr_of_currently_checked_out_branch(args)
+
+
+def check_pr_of_currently_checked_out_branch(args) -> ExitCode:
+    """Check the PR of the currently checked out branch."""
+
     # Get the number of the current PR:
     # In case we shall approve/merge, we need the PR number so we don't approve/merge the wrong PR.
-    exitcode, output = subprocess.getstatusoutput("gh pr view --json number -q .number")
-    if exitcode != 0:
-        print("Note: ", output)
+    exitcode, number = subprocess.getstatusoutput("gh pr view --json number -q .number")
+    if exitcode:
+        print("Failed to get the PR number:", number)
+        return exitcode
 
-    args.pull_request = output
+    args.pull_request = number
     if not pull_request_is_ready_for_review(args):
         return Success
 
