@@ -1271,7 +1271,8 @@ def pull_request_is_ready_for_review(args: argparse.Namespace) -> bool:
         return False
     if is_approved_or_changes_requested_by_me(pr):
         print("Already approved (or changes requested) by me, skipping approval and merge.")
-        return False
+        if args.yes and args.approve:
+            return False
     return True
 
 
