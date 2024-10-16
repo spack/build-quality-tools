@@ -1045,14 +1045,7 @@ def failure_summary(fails: List[Tuple[str, str]]) -> str:
         fails_summary += f"### `{failed_spec}`:\n```py\n"
         with open(log_file, "r", encoding="utf-8") as log:
             lines = log.readlines()
-            # Print one line before lines with the error marker as well:
             previous_line = ""
-            # TODO: Catch CMake errors and show the error message in the summary:
-            # Example of a cmake error:
-            # CMake Error at cmake_files/dependencies.cmake:35 (message):
-            #  SOPT built without ONNXrt support
-            # Call Stack (most recent call first):
-            #  CMakeLists.txt:40 (include)
             add_remaining_lines = False
             for line in lines:
                 if add_remaining_lines:
@@ -1064,6 +1057,7 @@ def failure_summary(fails: List[Tuple[str, str]]) -> str:
                     or "CMake Error" in line
                     or "errors found in build log" in line
                 ):
+                    # Include the line before lines with the error marker as well:
                     fails_summary += previous_line
                     fails_summary += line
                     previous_line = ""
