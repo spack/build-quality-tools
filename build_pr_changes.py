@@ -1195,9 +1195,10 @@ def build_and_act_on_results(args, installed, specs_to_check):
     if failed and args.approve:
         return create_change_request(args, build_results)
 
-    ret = check_diff_and_commit(args)
-    if ret:
-        return ret
+    if args.approve or args.merge:
+        ret = check_diff_and_commit(args)
+        if ret:
+            return ret
 
     if failed or not passed + installed:
         print(build_results)
