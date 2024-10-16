@@ -932,6 +932,14 @@ def main(args) -> int:
     if args.bootstrap:
         return bootstrap_spack()
 
+    # Check if the repo has a default remote repository set:
+    # It is needed for the gh pr commands to work.
+    # If not set, set the default remote repository to the spack repository.:
+    default_remote = subprocess.getoutput("gh repo set-default --view")
+    if default_remote.startswith("no default repository"):
+        print("Setting the default remote repository to spack/spack")
+        spawn("gh", ["repo", "set-default", "spack/spack"])
+
     if args.queue:
         return check_queue_file(args)
 
