@@ -562,6 +562,16 @@ def check_for_recipe(line, changed_files, changed_recipe, recipes):
             changed_recipe[0] = ""
 
 
+def add_bool_variant(variant, new_variants, line):
+    """Check the variant default and add boolean variants to the list of new variants"""
+
+    default = re.search(r"default=(\w+)", line)
+    # Check the line for "default=False" or "default=True" and if it is a boolean variant:
+    if default and default.group(1) in ("True", "False"):
+        # add the variant to the list of new variants:
+        new_variants.append(variant.group(1))
+
+
 # Of course, this diff parser is not perfect, and should be a class, but it's a start.
 def get_specs_to_check(args) -> List[str]:
     """Check if the current branch is up-to-date with the remote branch.
@@ -580,6 +590,7 @@ def get_specs_to_check(args) -> List[str]:
     next_line_is_version = False
     next_line_is_variant = False
     version_match = None
+    multiline_variant = None
 
     # The most reliable way to get the PR diff is to use the GitHub CLI:
     err, stdout, stderr = run(["gh", "pr", "diff"])
@@ -594,12 +605,19 @@ def get_specs_to_check(args) -> List[str]:
             next_line_is_variant = False
             default_versions = new_versions
             version_match = None
+            multiline_variant = None
             continue
         if line[0] != "+":
             continue
 
         check_for_recipe(line, changed_files, recipe, recipes)
         if not recipe[0]:
+            continue
+
+        if multiline_variant:
+            add_bool_variant(variant, new_variants, line)
+            if "    )" in line:
+                multiline_variant = None
             continue
 
         # Get the list of new and changed versions from the PR diff:
@@ -636,12 +654,12 @@ def get_specs_to_check(args) -> List[str]:
             continue
         variant = re.search(r'    variant\("([^"]+)", ', line)  # variant("name",
         if next_line_is_variant or variant:
-            next_line_is_variant = False
             variant = variant or re.search(r'"([^"]+)"', line)
             if variant:
-                variant_str = variant.group(1)
-                if variant_str not in ["cxxstd", "cuda"]:
-                    new_variants.append(variant_str)
+                if next_line_is_variant:
+                    multiline_variant = variant
+                    next_line_is_variant = False
+                add_bool_variant(variant, new_variants, line)
             continue
 
     add_recipe_variant_version(specs, recipe, new_variants, new_versions, deprecated)
