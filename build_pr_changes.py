@@ -942,6 +942,9 @@ def parse_args() -> argparse.Namespace:
         help="Additional dependency specs for the packages.",
     )
     argparser.add_argument(
+        "-f", "--force", action="store_true", help="Force the approval of packages."
+    )
+    argparser.add_argument(
         "-k",
         "--checkout",
         help="Checkout the PR branch (find it by PR query) to check the changes.",
@@ -1309,9 +1312,11 @@ def get_labels(pr: Dict[str, Any]) -> List[str]:
     return labels
 
 
-def changes_requested(pr: Dict[str, Any]) -> bool:
+def changes_requested(args: argparse.Namespace, pr: Dict[str, Any]) -> bool:
     """Check if no changes are requested on the PR."""
 
+    if args.force:
+        return False
     return get_reviews(pr, "CHANGES_REQUESTED") != [] or "changes-requested" in get_labels(pr)
 
 
@@ -1342,8 +1347,12 @@ def pull_request_is_ready_for_review(args: argparse.Namespace) -> bool:
         print("PR is already merged or closed.")
         return False
     if is_approved_or_changes_requested_by_me(pr):
-        print("Already approved (or changes requested) by me, skipping approval and merge.")
-        if args.yes and args.approve:
+        print("Already approved (or changes requested) by me.")
+        if args.force:
+            print("Force flag is set, will build, approve, and merge the PR.")
+        else:
+            print("Skipping approval and merge.")
+        if args.yes and args.approve and not args.force:
             return False
     return True
 
@@ -1421,18 +1430,18 @@ def check_approval_and_merge(args: argparse.Namespace, build_results: str):
         print(build_results + "\n\n")
 
         pr = get_pull_request_status(args)
-        if changes_requested(pr):
+        if changes_requested(args, pr):
             print("Changes requested by reviewers, skipping approval of the PR.")
 
         # Check if the PR is really ready for approval before approving:
         # Ask for confirmation before approving the PR.
-        target = "approval" if not changes_requested(pr) else "comment"
+        target = "approval" if not changes_requested(args, pr) else "comment"
         if (
             args.yes
             or not get_reviews(pr, "APPROVED")
             or input(f"Submit the build results as an {target} [y/n]: ") == "y"
         ):
-            option = "--approve" if not changes_requested(pr) else "--comment"
+            option = "--approve" if not changes_requested(args, pr) else "--comment"
             cmd = ["pr", "review", args.pull_request, option, "--body", build_results]
             exitcode = spawn("gh", cmd)
             if exitcode:
@@ -1461,7 +1470,7 @@ def merge_pr_if_requested(args) -> ExitCode:
             spawn("gh", ["pr", "diff"])
 
         pr = get_pull_request_status(args)
-        if changes_requested(pr):
+        if changes_requested(args, pr):
             print("Changes requested by reviewers, skipping approval of the PR.")
             return Success
 
