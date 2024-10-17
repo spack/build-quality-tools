@@ -41,6 +41,7 @@ files = ['*.py']
 [tool.pylint.messages_control]
 # These are safe to disable, fixing them is best done during a later code cleanup phases
 disable = [
+  "use-implicit-booleaness-not-comparison",
   "fixme"
 ]
 # Maximum number of branch for function / method body.
