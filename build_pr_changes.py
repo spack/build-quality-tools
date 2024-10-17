@@ -811,6 +811,17 @@ def spack_install(specs, args) -> Tuple[List[str], List[Tuple[str, str]]]:
 
         with LogFile(install_log_filename) as install_log:
             ret = spawn("bin/spack", cmd, logfile=install_log)
+            # Check if the installation failed, and if so, print the log file:
+            # TODO: Add support for retrying the installation if it fails.
+            # If the first line of the log contains "Error: ", clean the misc cache and retry.
+            if ret:
+                with open(install_log_filename, encoding="utf-8", errors="ignore") as log_file:
+                    if "Error: " in log_file.readline():
+                        print("Error in the log file, cleaning the misc cache and retrying.")
+                        spawn("bin/spack", ["clean", "--misc"])
+                        print("Retrying with misc cache cleaned:")
+                        ret = spawn("bin/spack", cmd, logfile=install_log)
+
         if ret == 0:
             print(f"\n------------------------- Passed {spec} -------------------------")
             passed.append(spec)
