@@ -803,10 +803,12 @@ def check_all_downloads(specs) -> ExitCode:
     return True
 
 
-def spack_install(specs, args) -> Tuple[List[str], List[Tuple[str, str]]]:
+def spack_install(specs, args) -> Tuple[List[str], List[Tuple[str, str]], List[str], List[str]]:
     """Install the packages."""
     passed = []
     failed = []
+    already_requested = []
+    requested_changes_for = []
     for spec in specs:
         if spec.startswith("composable-kernel"):
             print("Skipping composable-kernel: Without a fast GPU, it takes too long.")
@@ -839,11 +841,49 @@ def spack_install(specs, args) -> Tuple[List[str], List[Tuple[str, str]]]:
             passed.append(spec)
         else:
             print(f"\n------------------------- FAILED {spec} -------------------------")
-            print("\nFailed command:", " ".join(["bin/spack", *cmd]) + "\n")
+            command = " ".join(["bin/spack", *cmd])
+            print("\nFailed command:\n\n", command + "\n")
             print(f"Log file: {install_log_filename}")
             failed.append((spec, install_log_filename))
 
-    return passed, failed
+            if "salome-configuration" in spec:
+                continue
+            # if "salome-med" in spec:
+            #    continue
+
+            if args.request_changes:
+                print(f"\n------------------------- FAILED {spec} -------------------------")
+                header = "This command failed: `" + command + "`\n"
+                raw_report = header + failure_summary([(spec, install_log_filename)])
+                print(raw_report)
+                print(f"------------------------- FAILED {spec} -------------------------")
+                pr = get_pull_request_status(args)
+                for review in pr.get("reviews", []):
+                    if review.get("state") != "CHANGES_REQUESTED":
+                        continue
+                    if command in review.get("body", ""):
+                        print("Already requested changes for", spec)
+                        already_requested.append(spec)
+                        break
+                if spec not in already_requested:
+                    input_str = f"Request changes for {spec} in {args.pull_request_url}:? [y/N] "
+                    if not args.yes and input(input_str).lower() != "y":
+                        continue
+                    print(f"Requesting changes for {spec}:")
+                    report = remove_color_terminal_codes(raw_report)
+                    ret = spawn("gh", ["pr", "review", "--request-changes", "--body", report])
+                    if ret:
+                        print("Failed to request changes for", spec)
+                        raise ChildProcessError("Failed to request changes for " + spec)
+                    requested_changes_for.append(spec)
+
+    if args.verbose:
+        print("Summary:")
+        print("Passed:", " ".join(passed))
+        print("Failed:", " ".join([fail[0] for fail in failed]))
+        print("Requested changes for:", " ".join(requested_changes_for))
+        print("Already requested changes for:", " ".join(already_requested))
+    return passed, failed, requested_changes_for, already_requested
 
 
 def add_compiler_to_specs(specs_to_check, args) -> List[str]:
@@ -1287,14 +1327,19 @@ def check_diff_and_commit(args):
 def build_and_act_on_results(args, installed, specs_to_check):
     """Install the packages and act on the results."""
 
-    passed, failed = spack_install(specs_to_check, args)
+    passed, failed, requested_changes_for, already_requested = spack_install(specs_to_check, args)
     about_build_host, os_name, os_version_id = get_os_info()
 
+    # Remove the already requested changes from the failed specs:
+    report_failed = [spec for spec in failed if spec[0] not in already_requested]
+    # Remove the requested changes from the failed specs:
+    report_failed = [spec for spec in report_failed if spec[0] not in requested_changes_for]
+
     # Generate a report in markdown format for cut-and-paste into the PR comment:
-    build_results = generate_build_results(installed, passed, failed, about_build_host)
+    build_results = generate_build_results(installed, passed, report_failed, about_build_host)
 
     # Create a change request for the failed specs:
-    if failed and args.request_changes:
+    if report_failed and args.request_changes:
         return create_change_request(args, build_results)
 
     if args.approve or args.merge:
