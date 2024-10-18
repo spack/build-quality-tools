@@ -1093,25 +1093,57 @@ def check_and_build(args):
     return build_and_act_on_results(args, installed, specs_to_check)
 
 
-def head_of_build_log(line: str) -> str:
+def head_of_build_log(failed_spec: str, line: str) -> str:
     """Return the head of the build log."""
 
     build_log = line.strip()
     if not os.path.exists(build_log):
         return f"Build log not found: {build_log}\n"
 
-    print("Extracting the head of the build log:", build_log)
+    skip = [
+        "Compatibility with CMake",
+        "CMake Deprecation Warning",
+        "OLD behavior",
+        "  CMake.",
+        "  of CMake.",
+        "Update the VERSION argument",
+        "compatibility with older versions.",
+        "compiler: lib/spack/env",
+        "Detecting C compiler",
+    ]
     with open(build_log, "r", encoding="utf-8") as build_log_file:
-        head_of_log = "\n```\nBuild log:\n```py\n"
+        log = f"<details><summary>Head of the raw log for {failed_spec}</summary>\n\n```py\n"
         for i, log_line in enumerate(build_log_file):
             if i == 2 or "'-G'" in log_line:
                 continue  # Skip the long cmake command line for now
-            if i > 26:
-                head_of_log += "...\n"
+            if i > 42:
+                log += "...\n"
                 break
-            head_of_log += log_line
+            if not log_line or log_line.isspace():
+                continue
+            for skip_line in skip:
+                if skip_line in log_line:
+                    continue
+            log += log_line
+    log += "\n```\n</details>\n"
+    return log
 
-    return head_of_log
+
+def remove_long_strings(data: str) -> str:
+    """Remove long strings in the output."""
+
+    cwd = f"{os.getcwd()}/"
+    # remove '-DCMAKE_.*:STRING=<any text>' from the output:
+    data = re.sub("'-DCMAKE_.*:STRING=.*'", "", data)
+    # remove extra consecutive :: from the output:
+    data = re.sub(":+", ":", data).replace("           :", "")
+    # remove the current working directory and empty lines from the output:
+    return data.replace(cwd, "$PWD/").replace("\n:\n", "\n").replace("\n\n", "\n")
+
+
+def remove_color_terminal_codes(data: str) -> str:
+    """Remove color terminal codes from the output."""
+    return re.sub(r"\x1b\[[0-9;]*m", "", data)
 
 
 def failure_summary(fails: List[Tuple[str, str]]) -> str:
@@ -1138,7 +1170,7 @@ def failure_summary(fails: List[Tuple[str, str]]) -> str:
                     next_line_is_build_log = True
                     continue
                 if next_line_is_build_log:
-                    fails_summary += head_of_build_log(line)
+                    fails_summary += head_of_build_log(failed_spec, line)
                     break
 
                 if add_remaining_lines:
