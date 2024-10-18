@@ -1334,7 +1334,7 @@ def is_closed_or_merged(pr: Dict[str, Any]) -> bool:
     return pr_state in ["MERGED", "CLOSED"]
 
 
-def get_reviews(pr: Dict[str, Any], state: str) -> List[str]:
+def get_reviewers(pr: Dict[str, Any], state: str) -> List[str]:
     """Get the list of approvers of the PR with the given state."""
 
     approvers = []
@@ -1360,17 +1360,17 @@ def changes_requested(args: argparse.Namespace, pr: Dict[str, Any]) -> bool:
 
     if args.force:
         return False
-    return get_reviews(pr, "CHANGES_REQUESTED") != [] or "changes-requested" in get_labels(pr)
+    return get_reviewers(pr, "CHANGES_REQUESTED") != [] or "changes-requested" in get_labels(pr)
 
 
 def is_approved_or_changes_requested_by_me(pr: Dict[str, Any]) -> bool:
     """Check if the PR is already approved by me."""
 
-    approvers = get_reviews(pr, "APPROVED")
+    approvers = get_reviewers(pr, "APPROVED")
     if approvers:
         print("Approved by " + ", ".join(approvers))
 
-    requesters = get_reviews(pr, "CHANGES_REQUESTED")
+    requesters = get_reviewers(pr, "CHANGES_REQUESTED")
     if requesters:
         print("Changes requested by:", ", ".join(requesters))
 
@@ -1390,7 +1390,7 @@ def pull_request_is_ready_for_review(args: argparse.Namespace) -> bool:
         print("PR is already merged or closed.")
         return False
     if is_approved_or_changes_requested_by_me(pr):
-        print("Already approved (or changes requested) by me.")
+        print("{args.pull_request_url} is already approved (or changes requested) by me.")
         if args.force:
             print("Force flag is set, will build, approve, and merge the PR.")
         else:
@@ -1419,8 +1419,7 @@ def create_change_request(args: argparse.Namespace, build_results: str) -> ExitC
             "If there is no (longer) an issue, please change the PR to 'Ready for review' again."
         )
 
-    # Remove ANSI color codes from the output:
-    build_results = re.sub(r"\x1b\[[0-9;]*m", "", build_results)
+    build_results = remove_color_terminal_codes(build_results)
 
     # spawn("gh", ["issue", "create", "--title", "Fix the failed specs", "--body", build_results])
     # cmd = ["pr", "review", args.pull_request, "--request-changes", "--body", build_results]
@@ -1481,7 +1480,7 @@ def check_approval_and_merge(args: argparse.Namespace, build_results: str):
         target = "approval" if not changes_requested(args, pr) else "comment"
         if (
             args.yes
-            or not get_reviews(pr, "APPROVED")
+            or not get_reviewers(pr, "APPROVED")
             or input(f"Submit the build results as an {target} [y/n]: ") == "y"
         ):
             option = "--approve" if not changes_requested(args, pr) else "--comment"
@@ -1516,6 +1515,9 @@ def merge_pr_if_requested(args) -> ExitCode:
         if changes_requested(args, pr):
             print("Changes requested by reviewers, skipping approval of the PR.")
             return Success
+
+        # Show the current status of the PR:
+        spawn("gh", ["pr", "view", args.pull_request])
 
         if args.yes or input("\n\nMERGE this PR now? [y/n]: ") == "y":
             # TODO: Check/Fix the PR title and squashed commit messages for the correct format.
