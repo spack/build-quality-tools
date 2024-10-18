@@ -903,8 +903,12 @@ def checkout_pr_by_number(pr_number: str) -> ExitCode:
     # Show the changes in the PR:
     spawn("gh", ["pr", "diff", pr_number])
 
-    # Clean the staging directory (cleaning caches might be nice but causes long delays):
-    return spawn("bin/spack", ["clean", "--stage", "--misc"])
+    # Clean the staging directory:
+    # The repository cache could be cleaned as well, but it causes long delays
+    # and errors from stale repository cache should now be handled by detecting the error.
+    # running spack clean --misc and retrying the installation now. Thus, hopefully
+    # is not longer needed to clean the misc cache on each PR checkout:
+    return spawn("bin/spack", ["clean", "--stage"])
 
 
 def parse_args() -> argparse.Namespace:
