@@ -1119,12 +1119,15 @@ def failure_summary(fails: List[Tuple[str, str]]) -> str:
     if not fails:
         return ""
 
-    fails_summary = f"{len(fails)} failed specs:\n" if len(fails) > 1 else "One failed spec:\n"
-    for failed_spec, _ in fails:
-        fails_summary += f"- `{failed_spec}`\n"
+    fails_summary = f"{len(fails)} failed specs:\n" if len(fails) > 1 else ""
+    if len(fails) > 2:
+        for failed_spec, _ in fails:
+            fails_summary += f"- `{failed_spec}`\n"
 
     for failed_spec, log_file in fails:
-        fails_summary += f"### `{failed_spec}`:\n```py\n"
+        fails_summary += f"<details><summary>Failed spec: {failed_spec}</summary>\n\n"
+        fails_summary += f"### `{failed_spec}`:\n"
+        errors = ""
         with open(log_file, "r", encoding="utf-8") as log:
             lines = log.readlines()
             previous_line = ""
@@ -1139,23 +1142,29 @@ def failure_summary(fails: List[Tuple[str, str]]) -> str:
                     break
 
                 if add_remaining_lines:
-                    fails_summary += line
+                    errors += line
                     continue
                 # Match the color code and error marker and look for CMake errors:
-                if (
-                    r"[0;91m>> " in line
-                    or "CMake Error" in line
-                    or "errors found in build log" in line
-                ):
-                    # Include the line before lines with the error marker as well:
-                    fails_summary += previous_line
-                    fails_summary += line
-                    previous_line = ""
-                    add_remaining_lines = True
+                error_markers = [
+                    r"[0;91m",
+                    "Error",
+                    "error",
+                    "FAILED",
+                    "failed",
+                ]
+                for marker in error_markers:
+                    if marker in line:
+                        errors += previous_line
+                        errors += line
+                        previous_line = ""
+                        add_remaining_lines = True
+                        break
                 else:
                     previous_line = line
+            if errors:
+                fails_summary += f"```py\n{errors}```\n"
+            fails_summary += "</details>\n"
 
-        fails_summary += "\n```\n"
         if "failed to concretize" in lines[0]:
             fails_summary += "spack failed to concretize specs due to conflicts.\nThis may"
             fails_summary += " be intentional due to a conflict() in the recipe(s):\n"
@@ -1174,8 +1183,7 @@ def generate_build_results(installed, passed, fails, about_build_host) -> str:
     build_results += "- `" + "`\n- `".join(installed + passed) + "`\n\n"
 
     if installed or passed:
-        build_results += "These specs were installed:"
-        build_results += " (`~disabled` variants are hidden using `sed`)\n"
+        build_results += "These specs were installed (`~disabled` variants are hidden):\n"
         build_results += "```py\n"
         cmd = ["bin/spack", "find", "--variants", *(installed + passed)]
         build_results += " ".join(cmd)
