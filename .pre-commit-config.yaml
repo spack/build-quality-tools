@@ -64,7 +64,7 @@ repos:
         args: [--safe, --quiet]
 
 -   repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.11.2
+    rev: v1.12.0
     hooks:
     -   id: mypy
         name: Run mypy
@@ -96,7 +96,7 @@ repos:
   - id: markdownlint
 
 -   repo: https://github.com/RobertCraigie/pyright-python
-    rev: v1.1.383
+    rev: v1.1.385
     hooks:
     -   id: pyright
         name: Run pyright
@@ -113,7 +113,7 @@ repos:
       - tomli
 
 -   repo: https://github.com/xenserver-next/pre-commit-pytype
-    rev: '2024.09.13'
+    rev: '2024.10.11'
     hooks:
     -   id: pytype
         # Note: Pytype does not support Python 3.12 yet:
