@@ -1015,14 +1015,13 @@ def main(args) -> int:
 def check_pr_of_currently_checked_out_branch(args) -> ExitCode:
     """Check the PR of the currently checked out branch."""
 
-    # Get the number of the current PR:
-    # In case we shall approve/merge, we need the PR number so we don't approve/merge the wrong PR.
-    exitcode, number = subprocess.getstatusoutput("gh pr view --json number -q .number")
-    if exitcode:
-        print("Failed to get the PR number:", number)
-        return exitcode
+    # Get URL of the current PR for displaying in the logs:
+    args.pull_request_url = subprocess.getoutput("gh pr view --json url -q .url")
 
-    args.pull_request = number
+    # Get the number of the current PR:
+    # We use it for any further API calls so we don't act on the wrong PR.
+    args.pull_request = args.pull_request_url.split("/")[-1]
+
     if not pull_request_is_ready_for_review(args):
         return Success
 
