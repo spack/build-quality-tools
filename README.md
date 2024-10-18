@@ -14,8 +14,29 @@ Quick start:
   do not have a number o labels, are not reviewed by me and have maximum comment:
 
   ```py
-  gh pr list -L9 --search 'review:required draft:false no:assignee -status:failure -label:changes-requested -label:waiting-on-maintainer -label:waiting-on-dependency -label:question'`
+  gh pr list -L9 --search 'review:required draft:false no:assignee -status:failure -label:changes-requested -label:waiting-on-maintainer -label:waiting-on-dependency -label:question updated:>=2024-05-01' `
   ```
+
+  The output of this command can be edited by removing PRs
+  that are not safe to approve if all builds pass the reviewed
+  file can be passed to `build_pr_changes.py`:
+
+  ```py
+  gh pr list -L42 --search 'review:required draft:false no:assignee -status:failure -label:changes-requested -label:waiting-on-maintainer -label:waiting-on-dependency -label:question updated:>=2024-05-01' >recent-pr-queue.txt
+  build-quality-tools/build_pr_changes.py -q recent-pr-queue.txt -mar
+  ```
+
+  This will attempt to build all changed specs that were detected
+  from the `gh pr diff` of each queued PR.
+
+  For each PR that was able to build each discovered spec,
+  if the `-a|--approve` flag is given, it will approve the PR
+  or will ask if changes shall be requested for each failure.
+
+  The change request will include the build error from spack.
+
+  If the approve was successful and no other reviewer requested
+  changes, it will ask if you want to merge the PR.
 
 ## 📝 Tools for checking pull request quality
 
