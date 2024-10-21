@@ -644,6 +644,7 @@ def get_specs_to_check(args) -> List[str]:
             continue
         if version_match and "    )" in line:
             default_versions.append(version_match.group(1))
+            version_match = None
 
         if "with default_args(deprecated=True):" in line:
             default_versions = deprecated
