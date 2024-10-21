@@ -88,7 +88,7 @@ class LogFile:
         self.file.flush()
 
 
-def spawn(command: str, args, logfile=None) -> ExitCode:
+def spawn(command: str, args, logfile=None, **kwargs) -> ExitCode:
     """Spawn a command with input and output passed through, with a pyt and exit code."""
 
     print("Command:", " ".join([command, *args]))
@@ -120,10 +120,12 @@ def spawn(command: str, args, logfile=None) -> ExitCode:
         """Filter out the output."""
         # remove '-DCMAKE_.*:STRING=<any text>' from the output:
         data = re.sub(b"'-DCMAKE_.*:STRING=.*'", b"", data)
-        # remove extra consecutive :: from the output:
         data = re.sub(b":+", b":", data).replace(b"           :", b"")
+        data = data.replace(b"\n *:\n", b"\n").replace(b"\n+", b"\n")
+        if "filter_output" in kwargs:
+            data = kwargs["filter_output"](data)
         # remove the current working directory and empty lines from the output:
-        return data.replace(cwd, b"").replace(b"\n:\n", b"\n").replace(b"\n\n", b"\n")
+        return data.replace(cwd, b"$")
 
     child.interact(
         # The type annotation is wrong in pexpect, it should be str | None, not str:
