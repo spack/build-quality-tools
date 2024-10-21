@@ -827,6 +827,20 @@ def check_all_downloads(specs) -> ExitCode:
     return True
 
 
+def filter_spec_data(specs: str) -> str:
+    """Filter extra verbose data from the spec output."""
+
+    # Filter out the build system and build type from the output:
+    specs = re.sub(r" build_system=[a-z]+", "", specs)
+    specs = re.sub(r" build_type=[a-zA-Z]+", "", specs)
+    specs = re.sub(r" generator=[a-zA-Z]+", "", specs)
+    specs = re.sub(r" arch=[a-z0-9.-]+", "", specs)
+    # Remove disabled variants (words following ~) in the stdout:
+    # specs = re.sub(r"~[a-z0-9]+", "", specs)
+    specs = specs.replace(r"%gcc@13.1.0", "")
+    return specs
+
+
 def spack_install(specs, args) -> Tuple[List[str], List[Tuple[str, str]], List[str], List[str]]:
     """Install the packages."""
     passed = []
