@@ -845,18 +845,20 @@ def spack_install(specs, args) -> Tuple[List[str], List[Tuple[str, str]], List[s
     """Install the packages."""
     passed = []
     failed = []
-    already_requested = []
-    requested_changes_for = []
+    already_requested: List[str] = []
+    requested_changes_for: List[str] = []
     for spec in specs:
         if spec.startswith("composable-kernel"):
             print("Skipping composable-kernel: Without a fast GPU, it takes too long.")
             continue
 
         print(f"\nInstall {spec} ({specs.index(spec) + 1} of {len(specs)}):\n")
-        # TODO: Add support for installing the packages in a container, sandbox, or remote host.
-        # TODO: Concertize the the spec before installing to record the exact dependencies.
 
-        cmd = ["install", "-v", "--fail-fast", spec]
+        cmd = ["install", "-v", "--fail-fast"]
+        if args.build and "@" in args.build:
+            cmd += ["--deprecated"]  # If --build was used, the version might be deprecated.
+
+        cmd += [spec]
         cmd += ["^" + dep for dep in args.dependencies.split(",")] if args.dependencies else []
 
         install_log_filename = f"spack-builder-{spec}.log"
