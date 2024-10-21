@@ -695,17 +695,22 @@ def merge_variants(changed_recipe, variant, default_variants):
     return recipe_with_variants
 
 
-def add_recipe_variant_version(specs, changed_recipe, new_variants, new_versions, deprecated):
+def add_recipe_variant_version(
+    specs: List[str],
+    changed_recipe: List[str],
+    new_variants: List[str],
+    new_versions: List[str],
+    deprecated: List[str],
+):
     """Add the recipe, variants, and versions to the specs to check."""
     if not changed_recipe[0]:
         return
 
-    variants = {}
+    variants: Dict[str, str] = {}
     if new_variants:
         ret, variants = parse_variant_infos(changed_recipe[0])
         if ret:
             print("Error getting variants of", changed_recipe[0])
-            # return
 
     # Add the recipe with the default variants disabled (that are true) to the specs to check:
     # If the recipe has no variants, add the recipe without variants.
