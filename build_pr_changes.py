@@ -766,6 +766,13 @@ def add_recipe_variant_version(
         else:
             specs.append(changed_recipe[0])
 
+    # Some custom massaging for the conflicting variants in paraview (hope this works)
+    for spec in specs:
+        if "+fides" in spec and "+adios2" not in spec:
+            print("found fides without adios2")
+            specs.remove(spec)
+            specs.append(spec.replace("~adios2", "") + "+adios2")
+
     new_variants.clear()
     new_versions.clear()
     deprecated.clear()
