@@ -723,6 +723,15 @@ def add_recipe_variant_version(
     # Prepend ~ to all default variants to disable them.
     default_variants_disable = "".join(["~" + variant for variant in default_variants])
 
+    # Don't disable some default variants that are commonly used(paraview~opengl2 fails to build):
+
+    # Remove ~adios2, ~mpi, ~shared, ~static, ~python from default_variants_disable:
+    skip_disable = ["adios2", "mpi", "opengl2", "shared", "static", "python"]
+    for skip in skip_disable:
+        if skip in default_variants:
+            default_variants.remove(skip)
+            default_variants_disable = default_variants_disable.replace("~" + skip, "")
+
     # Add the matrix of variants and versions to the specs to check:
     if new_variants and new_versions:
         # Add the recipe with the default variants disabled (that are true) to the specs to check:
