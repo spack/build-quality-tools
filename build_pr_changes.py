@@ -861,20 +861,19 @@ def spack_install(specs, args) -> Tuple[List[str], List[Tuple[str, str]], List[s
         cmd += [spec]
         cmd += ["^" + dep for dep in args.dependencies.split(",")] if args.dependencies else []
 
-        install_log_filename = f"spack-builder-{spec}.log"
+        install_log = f"spack-builder-{spec}.log"
 
-        with LogFile(install_log_filename) as install_log:
-            ret = spawn("bin/spack", cmd, logfile=install_log)
-            # Check if the installation failed, and if so, print the log file:
-            # TODO: Add support for retrying the installation if it fails.
-            # If the first line of the log contains "Error: ", clean the misc cache and retry.
-            if ret:
-                with open(install_log_filename, encoding="utf-8", errors="ignore") as log_file:
-                    if "Error: " in log_file.readline():
-                        print("Error in the log file, cleaning the misc cache and retrying.")
-                        spawn("bin/spack", ["clean", "--misc"])
-                        print("Retrying with misc cache cleaned:")
-                        ret = spawn("bin/spack", cmd, logfile=install_log)
+        with LogFile(install_log) as install_logfile:
+            ret = spawn("bin/spack", cmd, logfile=install_logfile)
+
+        if ret:  # If the installation failed, clean the misc cache and retry
+            with open(install_log, encoding="utf-8", errors="ignore") as log_file:
+                # If the first line of the log contains "Error: ", clean the misc cache and retry.
+                if "Error: " in log_file.readline():
+                    print("Error in the log file, cleaning the misc cache and retrying.")
+                    spawn("bin/spack", ["clean", "--misc"])
+                    print("Retrying with misc cache cleaned:")
+                    ret = spawn("bin/spack", cmd, logfile=install_logfile)
 
         if ret == 0:
             print(f"\n------------------------- Passed {spec} -------------------------")
@@ -883,18 +882,13 @@ def spack_install(specs, args) -> Tuple[List[str], List[Tuple[str, str]], List[s
             print(f"\n------------------------- FAILED {spec} -------------------------")
             command = " ".join(["bin/spack", *cmd])
             print("\nFailed command:\n\n", command + "\n")
-            print(f"Log file: {install_log_filename}")
-            failed.append((spec, install_log_filename))
-
-            if "salome-configuration" in spec:
-                continue
-            # if "salome-med" in spec:
-            #    continue
+            print(f"Log file: {install_log}")
+            failed.append((spec, install_log))
 
             if args.request_changes:
                 print(f"\n------------------------- FAILED {spec} -------------------------")
                 header = "This command failed: `" + command + "`\n"
-                raw_report = header + failure_summary([(spec, install_log_filename)])
+                raw_report = header + failure_summary([(spec, install_log)])
                 print(raw_report)
                 print(f"------------------------- FAILED {spec} -------------------------")
                 pr = get_pull_request_status(args)
@@ -904,14 +898,26 @@ def spack_install(specs, args) -> Tuple[List[str], List[Tuple[str, str]], List[s
                     if command in review.get("body", ""):
                         print("Already requested changes for", spec)
                         already_requested.append(spec)
-                        break
+
                 if spec not in already_requested:
                     input_str = f"Request changes for {spec} in {args.pull_request_url}:? [y/N] "
                     if not args.yes and input(input_str).lower() != "y":
                         continue
-                    print(f"Requesting changes for {spec}:")
+
+                    raw_report += abbreviated_spec_info(spec, install_log + ".spec")
                     report = remove_color_terminal_codes(raw_report)
-                    ret = spawn("gh", ["pr", "review", "--request-changes", "--body", report])
+
+                    print("Writing report to", install_log + ".report")
+                    with open(install_log + ".report", "w", encoding="utf-8") as report_file:
+                        report_file.write(report)
+
+                    input_str = f"Comment instead to {args.pull_request_url}:? [y/N] "
+                    if not args.yes and input(input_str).lower() != "y":
+                        kind = "--comment"
+                    else:
+                        kind = "--request-changes"
+
+                    ret = spawn("gh", ["pr", "review", kind, "--body", report])
                     if ret:
                         print("Failed to request changes for", spec)
                         raise ChildProcessError("Failed to request changes for " + spec)
@@ -1194,7 +1200,7 @@ def head_of_build_log(failed_spec: str, line: str) -> str:
     with open(build_log, "r", encoding="utf-8") as build_log_file:
         log = f"<details><summary>Head of the raw log for {failed_spec}</summary>\n\n```py\n"
         for i, log_line in enumerate(build_log_file):
-            if i == 2 or "'-G'" in log_line:
+            if i <= 2 or "'-G'" in log_line:
                 continue  # Skip the long cmake command line for now
             if i > 42:
                 log += "...\n"
@@ -1204,6 +1210,8 @@ def head_of_build_log(failed_spec: str, line: str) -> str:
             for skip_line in skip:
                 if skip_line in log_line:
                     continue
+            if log_line.startswith("    '"):
+                log_line = log_line.replace("'", "")
             log += log_line
     log += "\n```\n</details>\n"
     return log
@@ -1214,7 +1222,7 @@ def remove_long_strings(data: str) -> str:
 
     cwd = f"{os.getcwd()}/"
     # remove '-DCMAKE_.*:STRING=<any text>' from the output:
-    data = re.sub("'-DCMAKE_.*:STRING=.*'", "", data)
+    data = re.sub(" '-DCMAKE_.*:STRING=.*'", "", data)
     # remove extra consecutive :: from the output:
     data = re.sub(":+", ":", data).replace("           :", "")
     # remove the current working directory and empty lines from the output:
@@ -1226,7 +1234,23 @@ def remove_color_terminal_codes(data: str) -> str:
     return re.sub(r"\x1b\[[0-9;]*m", "", data)
 
 
-def failure_summary(fails: List[Tuple[str, str]]) -> str:
+def abbreviated_spec_info(spec: str, spec_log_file: str) -> str:
+    """Return the abbreviated spec info."""
+
+    print(f"Getting `spack spec {spec}` ...")
+    with LogFile(spec_log_file + ".spec") as spec_log:
+        # os.environ["TERM"] = "dumb"
+        ret = spawn("bin/spack", ["spec", spec], logfile=spec_log, output_filter=filter_spec_data)
+        if ret:
+            raise ChildProcessError("Failed to get the spec for " + spec)
+    with open(spec_log_file + ".spec", encoding="utf-8", errors="ignore") as spec_log:
+        spec_report = filter_spec_data(spec_log.read())
+
+    report = f"\n\n<details><summary>Expand the spec output `spack spec {spec}`</summary>"
+    return report + "\n\n```yaml\n" + spec_report + "\n```\n\n</details>\n\n"
+
+
+def failure_summary(fails: List[Tuple[str, str]], **kwargs) -> str:
     """Generate a summary of the failed specs."""
     if not fails:
         return ""
@@ -1254,8 +1278,12 @@ def failure_summary(fails: List[Tuple[str, str]]) -> str:
                     break
 
                 if add_remaining_lines:
+                    line = re.sub("'-DCMAKE_.*:STRING=.*'", "", line)
+                    if line.startswith("    '"):
+                        line = line.replace("'", "")
                     errors += line
                     continue
+
                 # Match the color code and error marker and look for CMake errors:
                 error_markers = [
                     r"[0;91m",
@@ -1275,7 +1303,11 @@ def failure_summary(fails: List[Tuple[str, str]]) -> str:
                     previous_line = line
             if errors:
                 fails_summary += f"```py\n{errors}```\n"
-            fails_summary += "</details>\n"
+            fails_summary += "\n</details>\n\n"
+
+        # When include_specs in kwargs, include the specs in the summary:
+        if "include_specs" in kwargs:
+            fails_summary += abbreviated_spec_info(failed_spec, log_file + ".spec")
 
         if "failed to concretize" in lines[0]:
             fails_summary += "spack failed to concretize specs due to conflicts.\nThis may"
@@ -1475,11 +1507,11 @@ def pull_request_is_ready_for_review(args: argparse.Namespace) -> bool:
         print("PR is already merged or closed.")
         return False
     if is_approved_or_changes_requested_by_me(pr):
-        print("{args.pull_request_url} is already approved (or changes requested) by me.")
+        print(f"{args.pull_request_url} is already approved (or changes requested) by me.")
         if args.force:
             print("Force flag is set, will build, approve, and merge the PR.")
-        else:
-            print("Skipping approval and merge.")
+        elif args.approve or args.merge:
+            print("Skipping approval and/or merge.")
         if args.yes and args.approve and not args.force:
             return False
     return True
