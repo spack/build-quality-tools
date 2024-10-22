@@ -1320,33 +1320,60 @@ def failure_summary(fails: List[Tuple[str, str]], **kwargs) -> str:
     return fails_summary
 
 
+def remove_too_verbose_output(abstract_spec_str: str) -> str:
+    """Remove too verbose output from the abstract spec."""
+
+    # Filter out the build system and build type from the output:
+    abstract_spec_str = abstract_spec_str.replace(" build_system=pip", "")
+    abstract_spec_str = abstract_spec_str.replace(" build_system=perl", "")
+    abstract_spec_str = abstract_spec_str.replace(" build_system=autotools", "")
+    abstract_spec_str = abstract_spec_str.replace(" build_type=Release", "")
+    abstract_spec_str = abstract_spec_str.replace(" generator=make", "")
+    # Remove disabled variants (words following ~) in the stdout:
+    return re.sub(r"~[a-z0-9]+", "", abstract_spec_str)
+
+
+def spack_find_to_html_summary(spack_find_output: str) -> str:
+    """Convert the spack find output to an HTML-like summary that can be expanded."""
+
+    details = " (disabled variants are removed for the make the list the dependencies brief)"
+    head = "<details><summary>"
+    head += "Click on this line to unfold and refold the dependencies of this build\n\n\n```py\n"
+    html = ""
+    for line in spack_find_output.split("\n"):
+        cooked = remove_too_verbose_output(line)
+        if line[:3] == "-- ":
+            # remove " -<any number of dashes>" from the end of the line:
+            html += "### Using " + re.sub(r" -+.*$", "", line[3:]) + ":\n"
+            continue
+        if line[0] != " ":  # This is a build, add a summary for it
+            if not html or not html.endswith(":\n"):
+                html += "```\n</details>"
+            html += f"{head}{cooked}\n```\n</summary>\n\nDependency tree{details}:\n```py\n"
+            html += line + "\n"
+        else:
+            html += cooked + "\n"
+    return html + "```\n</details>\n\n"
+
+
 def generate_build_results(installed, passed, fails, about_build_host) -> str:
     """Generate a report in markdown format for cut-and-paste into the PR comment."""
 
-    build_results = f"Build results{about_build_host}:\n"
-    build_results += "The following specs were checked (extracted from `gh pr diff`):\n"
+    build_results = f"Build results{about_build_host}: "
+    build_results += "These changed specs were found `gh pr diff`:\n"
     build_results += "- `" + "`\n- `".join(installed + passed) + "`\n\n"
 
     if installed or passed:
-        build_results += "These specs were installed (`~disabled` variants are hidden):\n"
-        build_results += "```py\n"
-        cmd = ["bin/spack", "find", "--variants", *(installed + passed)]
-        build_results += " ".join(cmd)
-        build_results += " | sed 's/~[a-z]*//g;s/ [a-z0-9_]*=[a-zA-Z0-9]*//g'\n"
+        build_results += "The following specs were built (or installed) to check this PR:\n"
+        # build_results += "```py\n"
+        cmd = ["bin/spack", "find", "--deps", "--variants", *(installed + passed)]
+        # build_results += " ".join(cmd) + "\n```\n"
+        # build_results += " | sed 's/~[a-z]*//g;s/ [a-z0-9_]*=[a-zA-Z0-9]*//g'\n```\n"
         err, stdout, stderr = run(cmd)
-        if not err:
-            # Filter out the build system and build type from the output:
-            stdout = stdout.replace(" build_system=pip", "")
-            stdout = stdout.replace(" build_system=perl", "")
-            stdout = stdout.replace(" build_system=cmake", "")
-            stdout = stdout.replace(" build_type=Release", "")
-            stdout = stdout.replace(" generator=make", "")
-            # Remove disabled variants (words following ~) in the stdout:
-            stdout = re.sub(r"~[a-z0-9]+", "", stdout)
-            build_results += stdout.replace(" build_system=python_pip", "")
-        else:
+        if err:
             build_results += stderr or stdout
-        build_results += "\n```\n"
+        else:
+            build_results += spack_find_to_html_summary(stdout)
 
     build_results += failure_summary(fails)
     if fails:
@@ -1359,12 +1386,9 @@ def generate_build_results(installed, passed, fails, about_build_host) -> str:
     err, stdout, stderr = run(["git", "-C", git_dir, "config", "--get", "remote.origin.url"])
     if not err:
         url = stdout.replace("git@github.com:", "https://github.com/").replace(".git", "")
-        build_results += url + "/blob/main/"
-    build_results += os.path.basename(__file__) + "\n```py\n" + " ".join(sys.argv) + "\n```"
+        build_results += url + f"/blob/main/{os.path.basename(__file__)} "
+        build_results += " ".join(sys.argv[1:]) + "\n"
 
-    # Don't show the full path to the files, and replace the home directory with ~:
-    build_results = build_results.replace(os.getcwd() + "/", "")
-    build_results = build_results.replace(os.path.expanduser("~"), "~")
     return build_results
 
 
@@ -1593,6 +1617,8 @@ def check_approval_and_merge(args: argparse.Namespace, build_results: str):
         if changes_requested(args, pr):
             print("Changes requested by reviewers, skipping approval of the PR.")
 
+        print("Link to the PR:", args.pull_request_url)
+
         # Check if the PR is really ready for approval before approving:
         # Ask for confirmation before approving the PR.
         target = "approval" if not changes_requested(args, pr) else "comment"
@@ -1603,7 +1629,7 @@ def check_approval_and_merge(args: argparse.Namespace, build_results: str):
         ):
             option = "--approve" if not changes_requested(args, pr) else "--comment"
             cmd = ["pr", "review", args.pull_request, option, "--body", build_results]
-            exitcode = spawn("gh", cmd)
+            exitcode = spawn("gh", cmd, show_command=False)
             if exitcode:
                 return exitcode
         else:
