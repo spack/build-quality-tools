@@ -91,7 +91,8 @@ class LogFile:
 def spawn(command: str, args, logfile=None, **kwargs) -> ExitCode:
     """Spawn a command with input and output passed through, with a pyt and exit code."""
 
-    print("Command:", " ".join([command, *args]))
+    if kwargs.get("show_command", True):
+        print("Command:", " ".join([command, *args]))
     child = pexpect.spawnu(command, args, timeout=1800)  # 1800 is 30 minutes
     if logfile:
         child.logfile_read = logfile
