@@ -869,7 +869,12 @@ def spack_install(specs, args) -> Tuple[List[str], List[Tuple[str, str]], List[s
         if ret:  # If the installation failed, clean the misc cache and retry
             with open(install_log, encoding="utf-8", errors="ignore") as log_file:
                 # If the first line of the log contains "Error: ", clean the misc cache and retry.
-                if "Error: " in log_file.readline():
+                line = log_file.readline()
+                if "Error: failed to concretize" in line:
+                    print("Concretization failed, need help from spack to fix this, aborting.")
+                    failed.append((spec, install_log))
+                    continue
+                if "Error: " in line:
                     print("Error in the log file, cleaning the misc cache and retrying.")
                     spawn("bin/spack", ["clean", "--misc"])
                     print("Retrying with misc cache cleaned:")
@@ -1085,18 +1090,19 @@ def main(args) -> int:
     if args.bootstrap:
         return bootstrap_spack()
 
-    remote = subprocess.getoutput("git ls-remote --get-url")
-    if "/spack" not in remote:
-        print("gh-spack-pr: The remote of the current branch does not appear to be a spack repo:")
-        print("'git ls-remote --get-url' shows:", remote)
-        print("Please see -h | --help for help on gh-spack-pr usage.")
-        return 1
-
     # Check if the repo has a default remote repository set:
     # It is needed for the gh pr commands to work.
     # If not set, set the default remote repository to the spack repository.:
     default_remote = subprocess.getoutput("gh repo set-default --view")
     if default_remote.startswith("no default repository"):
+        remote = subprocess.getoutput("git ls-remote --get-url")
+        if "/spack" not in remote:
+            print("The remote of the current branch does not appear to be a spack repo:")
+            print("'git ls-remote --get-url' shows:", remote)
+            print("Please see -h | --help for help on gh-spack-pr usage.")
+            print("If this is a spack repo use: gh repo set-default spack/spack")
+            return 1
+
         print("Setting the default remote repository to spack/spack")
         spawn("gh", ["repo", "set-default", "spack/spack"])
 

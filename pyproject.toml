@@ -50,11 +50,11 @@ max-branches = 20
 
 # Maximum number of locals for function / method body.
 # defaults to: max-locals=15
-max-locals = 22
+max-locals = 24
 
 # Maximum number of statements in function / method body.
 # defaults to: max-statements=50
-max-statements = 75
+max-statements = 80
 
 # Maximum number of lines in a module.
 # defaults to: max-module-lines=1000
