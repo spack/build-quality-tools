@@ -1,21 +1,12 @@
 #!/usr/bin/env python3
-"""For reviewing pull requests, run `spack install` on recipes changed current PR
-
-Important TODO:
-run spack maintainers to check for maintainers of the packages.
-Only attempt to merge if the maintainers approved merging the PR.
-
-Important TODO:
-- if the rebase to develop fails, merge develop into the branch and push the branch.
-
-Important TODO:
-Limit the amount of builds: For some PR, the amount of versions*variants can be >300.
-
-Done:
-- If a review requested changes (especially non-members), never approve or merge the PR.
-"""
+"""Tool to run 'spack install' on changed recipes by a checked out PR branch."""
 # Copyright 2024, Bernhard Kaindl
 # SPDX-License-Identifier: (Apache-2.0 OR MIT)
+
+# TODOs:
+# - run spack maintainers to check for maintainers of the packages.
+#   Only attempt to merge if the maintainers approved merging the PR.
+# - Limit the amount of builds: For some PR, the amount of versions*variants can be >300.
 import argparse
 import json
 import os
@@ -26,8 +17,8 @@ import sys
 import tempfile
 import time
 import traceback
-from io import BytesIO
 from glob import glob
+from io import BytesIO
 from logging import INFO, basicConfig, info
 from pathlib import Path
 from shutil import which
@@ -1099,6 +1090,11 @@ def main(args) -> int:
 
     if args.bootstrap:
         return bootstrap_spack()
+
+    remote = subprocess.getoutput("git ls-remote --get-url")
+    if "/spack" not in remote:
+        print(f"The remote of the current branch is {remote}. Not a spack repository?")
+        return 1
 
     # Check if the repo has a default remote repository set:
     # It is needed for the gh pr commands to work.
