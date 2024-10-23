@@ -912,13 +912,18 @@ def spack_install(specs, args) -> Tuple[List[str], List[Tuple[str, str]], List[s
                     with open(install_log + ".report", "w", encoding="utf-8") as report_file:
                         report_file.write(report)
 
-                    input_str = f"Comment instead to {args.pull_request_url}:? [y/N] "
-                    if not args.yes and input(input_str).lower() != "y":
-                        kind = "--comment"
+                    kind = "--comment"
+                    if args.request_changes:
+                        print("Request changes? (else the report is added just comment):")
+                        req = input_str = f"Request changes to {args.pull_request_url}:? [y/N] "
+                        if req == "y":
+                            kind = "--request-changes"
                     else:
-                        kind = "--request-changes"
+                        req = input_str = f"Add a comment to {args.pull_request_url}:? [y/N] "
+                        if req != "y":
+                            continue
 
-                    ret = spawn("gh", ["pr", "review", kind, "--body", report])
+                    ret = spawn("gh", ["pr", "review", kind, "--body", report], show_command=False)
                     if ret:
                         print("Failed to request changes for", spec)
                         raise ChildProcessError("Failed to request changes for " + spec)
