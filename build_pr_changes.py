@@ -969,8 +969,8 @@ def checkout_pr_by_search_query(args: argparse.Namespace) -> ExitCode:
         return Success
 
     # Find the PR number from the PR query:
-    query = f"in:title draft:false -review:changes_requested {args.checkout}"
-    find_pr = f"gh pr list --limit 1 -S '{query}' "
+    query = f"in:title {args.checkout}"
+    find_pr = f"gh pr list --limit 1 --search '{query}' "
     print("Querying for the PR to check out, please wait a second or so:\n" + find_pr)
     exitcode, number = subprocess.getstatusoutput(f"{find_pr} --json number -q.[].number")
     if exitcode != 0 or not number:
@@ -1338,7 +1338,7 @@ def remove_too_verbose_output(abstract_spec_str: str) -> str:
     return re.sub(r"~[a-z0-9]+", "", abstract_spec_str)
 
 
-def spack_find_to_html_summary(spack_find_output: str) -> str:
+def spack_find_summary(spack_find_output: str) -> str:
     """Convert the spack find output to an HTML-like summary that can be expanded."""
 
     details = " (disabled variants are removed for the make the list the dependencies brief)"
@@ -1347,6 +1347,8 @@ def spack_find_to_html_summary(spack_find_output: str) -> str:
     html = ""
     for line in spack_find_output.split("\n"):
         cooked = remove_too_verbose_output(line)
+        if not cooked:
+            continue
         if line[:3] == "-- ":
             # remove " -<any number of dashes>" from the end of the line:
             html += "### Using " + re.sub(r" -+.*$", "", line[3:]) + ":\n"
@@ -1378,7 +1380,7 @@ def generate_build_results(installed, passed, fails, about_build_host) -> str:
         if err:
             build_results += stderr or stdout
         else:
-            build_results += spack_find_to_html_summary(stdout)
+            build_results += spack_find_summary(stdout)
 
     build_results += failure_summary(fails)
     if fails:
