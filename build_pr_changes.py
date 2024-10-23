@@ -458,6 +458,23 @@ def bootstrap_spack() -> ExitCode:
     return setup_github_cli_dashboard(build_tools_dir)
 
 
+def gh_set_alias(name: str, cmd: str) -> None:
+    """Set a GitHub CLI alias."""
+    ret = spawn("gh", ["alias", "set", "--clobber", name, "--shell", cmd], show_command=False)
+    if ret:
+        raise ChildProcessError(f"Failed to set the alias {name} to the command {cmd}.")
+
+
+def gh_set_checkout_alias(name: str, github_pull_request_search_expressions: List[str]) -> None:
+    """Set a GitHub CLI alias for checking out PRs."""
+
+    query_string = " ".join(github_pull_request_search_expressions)
+    github_pull_request_list_args = f"-S '{query_string}'"
+    fzf_pr_list = f'id="$(gh pr list -L60 {github_pull_request_list_args}|fzf|cut -f1)"'
+    checkout_id = """;[ -n "$id" ] && gh pr checkout $id && gh pr view -c && gh pr diff"""
+    gh_set_alias(name, fzf_pr_list + checkout_id)
+
+
 def setup_github_cli_fzf_aliases() -> ExitCode:
     """Set up the fzf fuzzy finder for the shell and the GitHub CLI commands/aliases."""
 
@@ -467,33 +484,23 @@ def setup_github_cli_fzf_aliases() -> ExitCode:
         return exitcode
 
     # Set up the GitHub CLI aliases for checking out PRs:
-    exitcode = spawn(
-        "gh",
-        [
-            "alias",
-            "set",
-            "--clobber",
-            "co",
-            "--shell",
-            'id="$(gh pr list -L60|fzf|cut -f1)"; [ -n "$id" ] && gh pr checkout "$id"',
-        ],
-    )
-    if exitcode:
-        return exitcode
-    return spawn(
-        "gh",
-        [
-            "alias",
-            "set",
-            "--clobber",
-            "review",
-            "--shell",
-            'id="$(gh pr list -L20 -S "review:required draft:false no:assignee'
-            " -status:failure -label:changes-requested -label:waiting-on-maintainer"
-            ' -label:waiting-on-dependency"|fzf|cut -f1)"; [ -n "$id" ]'
-            " && gh pr checkout $id && gh pr view -c && gh pr diff",
-        ],
-    )
+    updated_recently = "updated:>2024-06-01"
+    # Add an alias "gh co" to checkout any recent (last 60) PR:
+    gh_set_checkout_alias("co", [updated_recently])
+    query_review_needed = [
+        "review:required",
+        "draft:false",
+        "no:assignee",
+        "-status:failure",
+        "-label:changes-requested",
+        "-label:waiting-on-maintainer",
+        "-label:waiting-on-dependency",
+        updated_recently,
+    ]
+    gh_set_checkout_alias("co-review-needed", query_review_needed)
+    gh_set_checkout_alias("co-review-title-add", query_review_needed + ["in:title add"])
+    gh_set_checkout_alias("co-review-title-new", query_review_needed + ["in:title new"])
+    return Success
 
 
 def get_safe_versions(spec):
