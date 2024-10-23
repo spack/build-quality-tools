@@ -25,13 +25,7 @@ from shutil import which
 from subprocess import getoutput
 from typing import Any, Dict, List, Tuple, TypeAlias
 
-try:
-    import pexpect
-except ImportError:
-    print("pexpect missing, please run:")
-    print("sudo apt-get -y install python3-pexpect || pip3 install pexpect")
-    sys.exit(1)
-
+from _vendor import pexpect
 
 ExitCode: TypeAlias = int
 Success: ExitCode = 0

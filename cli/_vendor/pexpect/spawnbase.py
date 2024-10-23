@@ -8,7 +8,7 @@ from .exceptions import ExceptionPexpect, EOF, TIMEOUT
 from .expect import Expecter, searcher_string, searcher_re
 
 PY3 = (sys.version_info[0] >= 3)
-text_type = str if PY3 else unicode
+text_type = str if PY3 else unicode  # type:ignore[name-defined]
 
 class _NullCoder(object):
     """Pass bytes through unchanged."""

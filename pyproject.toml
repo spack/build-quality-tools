@@ -71,4 +71,5 @@ ignore = ['']
 # extraPaths = ['']
 
 [tool.pytype]
+inputs = ["cli/check.py"]
 exclude = ["cli/_vendor/**"]

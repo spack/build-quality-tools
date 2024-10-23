@@ -67,13 +67,11 @@ repos:
         exclude: cli/_vendor
 
 -   repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.12.0
+    rev: v1.13.0
     hooks:
     -   id: mypy
         name: Run mypy
         exclude: cli/_vendor
-        additional_dependencies:
-        - pexpect
 
 -   repo: local
     hooks:
@@ -100,15 +98,13 @@ repos:
   - id: markdownlint
 
 -   repo: https://github.com/RobertCraigie/pyright-python
-    rev: v1.1.385
+    rev: v1.1.386
     hooks:
     -   id: pyright
         name: Run pyright
         exclude: cli/_vendor
         additional_dependencies:
-        - pexpect
         - typing-extensions
-        - types-pexpect
 
 - repo: https://github.com/codespell-project/codespell
   rev: v2.3.0
@@ -130,14 +126,10 @@ repos:
         # that also the GitHub Action currently uses:
         # language_version: "3.10"
         name: Run pytype
-        additional_dependencies: [pexpect]
-        args: ['build_pr_changes.py']
+        args: ['cli/check.py']
 
 -   repo: https://github.com/pylint-dev/pylint
     rev: v3.3.1
     hooks:
     -   id: pylint
         exclude: cli/_vendor
-        additional_dependencies:
-        - pexpect
-        - types-pexpect
