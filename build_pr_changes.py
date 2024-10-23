@@ -88,9 +88,23 @@ class LogFile:
         self.file.flush()
 
 
+def update_terminal_status_bar(message: str, args: List[str]) -> None:
+    """Update the terminal's terminal status bar with the basename of the current directory"""
+
+    message = " ".join([message, *args])[:50]
+    cwd = os.getcwd()
+    if cwd.startswith(os.path.expanduser("~")):
+        cwd = cwd.replace(os.path.expanduser("~"), "~")
+    else:
+        cwd = cwd.split("/")[-1]
+    status = f"{cwd}: {message}"
+    print(f"\033]0;{status}\007", end="")
+
+
 def spawn(command: str, args, logfile=None, **kwargs) -> ExitCode:
     """Spawn a command with input and output passed through, with a pyt and exit code."""
 
+    update_terminal_status_bar(command, args)
     if kwargs.get("show_command", True):
         print("Command:", " ".join([command, *args]))
     child = pexpect.spawnu(command, args, timeout=1800)  # 1800 is 30 minutes
@@ -138,6 +152,7 @@ def spawn(command: str, args, logfile=None, **kwargs) -> ExitCode:
 
     child.expect(pexpect.EOF)
     child.close()
+    update_terminal_status_bar(f"{child.exitstatus}: {command}", args)
     return int(child.exitstatus or 0)
 
 
