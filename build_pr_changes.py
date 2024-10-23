@@ -126,7 +126,7 @@ def spawn(command: str, args, logfile=None, **kwargs) -> ExitCode:
         if "filter_output" in kwargs:
             data = kwargs["filter_output"](data)
         # remove the current working directory and empty lines from the output:
-        return data.replace(cwd, b"$")
+        return data.replace(cwd, b"")
 
     child.interact(
         # The type annotation is wrong in pexpect, it should be str | None, not str:
