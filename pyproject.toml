@@ -69,3 +69,6 @@ verboseOutput = true
 include = ['.']
 ignore = ['']
 # extraPaths = ['']
+
+[tool.pytype]
+exclude = ["cli/_vendor/**"]
