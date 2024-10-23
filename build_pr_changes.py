@@ -1219,7 +1219,7 @@ def head_of_build_log(failed_spec: str, line: str) -> str:
             if log_line.startswith("    '"):
                 log_line = log_line.replace("'", "")
             log += log_line
-    log += "\n```\n</details>\n"
+    log += "\n```\n</details>\n\n"
     return log
 
 
@@ -1273,7 +1273,7 @@ def failure_summary(fails: List[Tuple[str, str]], **kwargs) -> str:
         with open(log_file, "r", encoding="utf-8") as log:
             lines = log.readlines()
             previous_line = ""
-            add_remaining_lines = False
+            add_remaining_lines = 0
             next_line_is_build_log = False
             for line in lines:
                 if line == "See build log for details:\n":
@@ -1288,13 +1288,14 @@ def failure_summary(fails: List[Tuple[str, str]], **kwargs) -> str:
                     if line.startswith("    '"):
                         line = line.replace("'", "")
                     errors += line
+                    add_remaining_lines -= 1
                     continue
 
                 # Match the color code and error marker and look for CMake errors:
                 error_markers = [
                     r"[0;91m",
-                    "Error",
-                    "error",
+                    "Error:",
+                    "error:",
                     "FAILED",
                     "failed",
                 ]
@@ -1303,7 +1304,7 @@ def failure_summary(fails: List[Tuple[str, str]], **kwargs) -> str:
                         errors += previous_line
                         errors += line
                         previous_line = ""
-                        add_remaining_lines = True
+                        add_remaining_lines = 2
                         break
                 else:
                     previous_line = line
@@ -1360,6 +1361,9 @@ def spack_find_summary(spack_find_output: str) -> str:
             html += line + "\n"
         else:
             html += cooked + "\n"
+        if len(html) > 8000:
+            html += "... (truncated)"
+            break
     return html + "```\n</details>\n\n"
 
 
@@ -1452,7 +1456,7 @@ def build_and_act_on_results(args, installed, specs_to_check):
             return ret
 
     if failed or not passed + installed:
-        print(build_results)
+        print("Link to the PR:", args.pull_request_url)
         return 1
 
     if args.label_success:
@@ -1534,6 +1538,7 @@ def is_approved_or_changes_requested_by_me(pr: Dict[str, Any]) -> bool:
 def pull_request_is_ready_for_review(args: argparse.Namespace) -> bool:
     """Check if the PR is ready for review."""
 
+    print("Checking the approval status of the PR:", args.pull_request_url)
     pr = get_pull_request_status(args)
     if is_closed_or_merged(pr):
         print("PR is already merged or closed.")
@@ -1573,7 +1578,7 @@ def create_change_request(args: argparse.Namespace, build_results: str) -> ExitC
     # spawn("gh", ["issue", "create", "--title", "Fix the failed specs", "--body", build_results])
     # cmd = ["pr", "review", args.pull_request, "--request-changes", "--body", build_results]
     cmd = ["pr", "review", args.pull_request, "--comment", "--body", build_results]
-    exitcode = spawn("gh", cmd)
+    exitcode = spawn("gh", cmd, show_command=False)
     if exitcode:
         return exitcode
 
