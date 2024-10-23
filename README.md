@@ -1,12 +1,29 @@
-# ✨ Spack build quality review tools
+# ✨ GitHub CLI extension `spack-pr`
 
 ## 🌅 Introduction on using the GitHub CLI (`gh`)
+
+GitHub has a public API that you can use to work with pull requests.
+
+It can be used to submit (for example) build results of PRs.
+
+This extension to the GitHub CLI does exactly that:
+
+- It helps with checking out PRs to review and check if they work.
+- You can use `gh pr checkout <PR number>` to checkout a PR
+- Or, you can pass a keyword from the PR's title to check out the PR.
+- Or, you can check a list of PRs by creating a file with PRs to build.
+- If all goes well, you get a summary of building all specs changed in the PR
+- If that looks fine, you can submit it to the PR as a comment (work in progress)
+- If builds fail, you can examine the cause and submit the failure likewise.
 
 Quick start:
 
 - Install `gh` using `spack install gh` or any other means: <http://cli.github.com>
 - Run `gh auth login`: The URL it tries to open into your browser and login
-- In your `spack` checkout directory:
+- Then you can install the `spack-pr` extension: `gh extension install spack/gh-spack-pr`
+
+Using `gh` your `spack` checkout directory:
+
 - Run `gh pr checkout <PR number>` for checking out a PR to review.
 - Run `gh pr review --approve -b "Tested in my environment"` to approve a PR
 - Run `gh pr merge --auto --squash` to merge it (enables auto-merge if not ready yet)
