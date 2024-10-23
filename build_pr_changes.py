@@ -335,7 +335,7 @@ def print_missing_tools(version_checks):
 def print_version_checks(version_checks):
     """Print the versions of the tools."""
     for tool in version_checks:
-        output, err = pexpect.run(tool + " --version", encoding="utf-8", withexitstatus=True)
+        err, output = subprocess.getstatusoutput(tool + " --version")
         if err:
             print("Failed to run", tool, " --version")
             return err
@@ -1093,7 +1093,9 @@ def main(args) -> int:
 
     remote = subprocess.getoutput("git ls-remote --get-url")
     if "/spack" not in remote:
-        print(f"The remote of the current branch is {remote}. Not a spack repository?")
+        print("gh-spack-pr: The remote of the current branch does not appear to be a spack repo:")
+        print("'git ls-remote --get-url' shows:", remote)
+        print("Please see -h | --help for help on gh-spack-pr usage.")
         return 1
 
     # Check if the repo has a default remote repository set:
