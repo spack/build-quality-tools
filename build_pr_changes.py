@@ -163,14 +163,14 @@ def update_apt_package_cache() -> ExitCode:
     # If /var/cache/apt/pkgcache.bin older than 24 hours, update the package list.
     if os.path.exists("/var/cache/apt/pkgcache.bin"):
         if os.path.getmtime("/var/cache/apt/pkgcache.bin") < time.time() - 86400:
-            error = spawn("sudo", ["apt-get", "-y", "update"])
+            error = spawn("sudo", ["apt-get", "update"])
             if error:
                 print("Failed to update the package list.")
                 return error
     return Success
 
 
-def install_github_cli_from_github_debian_repo() -> ExitCode:
+def install_github_cli_debian_repo() -> ExitCode:
     """Install the GitHub CLI from the GitHub repository."""
 
     ring = "/etc/apt/trusted.gpg.d/githubcli-archive-keyring.gpg"
@@ -205,19 +205,13 @@ def install_github_cli_from_github_debian_repo() -> ExitCode:
             print("Failed to create the GitHub CLI repository configuration.")
             return exit_code
 
-    # Update the package list:
-    exit_code = spawn("sudo", ["apt-get", "update"])
-    if exit_code:
-        print("Failed to update the package list.")
-        return exit_code
+        # Update the package list:
+        exit_code = spawn("sudo", ["apt-get", "update"])
+        if exit_code:
+            print("Failed to update the package list.")
+            return exit_code
 
-    # Install the GitHub CLI:
-    exit_code = spawn("sudo", ["apt-get", "install", "-y", "gh"])
-    if exit_code:
-        print("Failed to install the optional tooling packages.")
-        return exit_code
-
-    return spawn("sudo", ["apt", "update"])
+    return Success
 
 
 def install_spack_dependencies_on_debian() -> ExitCode:
@@ -231,7 +225,8 @@ def install_spack_dependencies_on_debian() -> ExitCode:
     os.environ["NEEDRESTART_SUSPEND"] = "y"
     os.environ["NEEDRESTART_MODE"] = "l"
 
-    update_apt_package_cache()
+    if install_github_cli_debian_repo() or update_apt_package_cache():
+        return 1
 
     # Remove needrestart: It inserts a prompt during package installation.
     exitcode, output = subprocess.getstatusoutput("dpkg-query -l needrestart")
@@ -249,6 +244,7 @@ def install_spack_dependencies_on_debian() -> ExitCode:
         ("llvm-dev", "llvm-config"),  # llvm-config is needed for building mesa
         "curl",  # Download tool
         "wget",  # Download tool
+        "gh",  # GitHub CLI
         "fzf",  # Fuzzy finder for the shell and the GitHub CLI commands/aliases
         "pipx",  # Python package manager for tools like pre-commit and black
         ("python3-pip", "pip3"),  # Python package manager
@@ -266,10 +262,6 @@ def install_spack_dependencies_on_debian() -> ExitCode:
         if exit_code:
             print("Failed to install the optional tooling packages.")
             return exit_code
-
-    exit_code = install_github_cli_from_github_debian_repo()
-    if exit_code:
-        return exit_code
 
     # Use pipx to install the latest versions of pre-commit and black:
     for tool in ["pre-commit", "black"]:
