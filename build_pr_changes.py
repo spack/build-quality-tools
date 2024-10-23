@@ -1530,8 +1530,8 @@ def changes_requested(args: argparse.Namespace, pr: Dict[str, Any]) -> bool:
     return get_reviewers(pr, "CHANGES_REQUESTED") != [] or "changes-requested" in get_labels(pr)
 
 
-def is_approved_or_changes_requested_by_me(pr: Dict[str, Any]) -> bool:
-    """Check if the PR is already approved by me."""
+def print_reviewers(pr: Dict[str, Any]) -> Tuple[List[str], List[str]]:
+    """Print the reviewers of the PR."""
 
     approvers = get_reviewers(pr, "APPROVED")
     if approvers:
@@ -1541,6 +1541,13 @@ def is_approved_or_changes_requested_by_me(pr: Dict[str, Any]) -> bool:
     if requesters:
         print("Changes requested by:", ", ".join(requesters))
 
+    return approvers, requesters
+
+
+def is_approved_or_changes_requested_by_me(pr: Dict[str, Any]) -> bool:
+    """Check if the PR is already approved by me."""
+
+    approvers, requesters = print_reviewers(pr)
     github_user = get_github_user()
     if not github_user:
         print("Failed to get the GitHub user.")
@@ -1606,56 +1613,44 @@ def create_change_request(args: argparse.Namespace, build_results: str) -> ExitC
     # return Success
 
 
+def review_pr(args: argparse.Namespace, kind: str, build_results: str) -> ExitCode:
+    """Submit a review to the PR with the build results."""
+
+    cmd = ["pr", "review", args.pull_request, kind, "--body", build_results]
+    return spawn("gh", cmd, show_command=False)
+
+
 def check_approval_and_merge(args: argparse.Namespace, build_results: str):
     """Check if the PR is/can be approved and merge the PR if all specs passed."""
 
     if args.approve:
         print("Approve requested, please review the PR diff before merging!")
         spawn("gh", ["pr", "diff"])
-        # Check if it is already approved:
-        # gh pr view 46977 --json reviews,state
-        # {
-        #   "state": "OPEN"
-        #   "reviews": [
-        #     {
-        #       "author": {
-        #         "login": "becker33"
-        #       },
-        #       "authorAssociation": "MEMBER",
-        #       "body": "",
-        #       "submittedAt": "2024-10-14T23:15:56Z",
-        #       "includesCreatedEdit": false,
-        #       "reactionGroups": [],
-        #       "state": "APPROVED"
-        #     }
-        #   ],
-
-        # }
-        # cmd = ["gh", "pr", "view", args.pull_request, "--json", "state", "-q", ".state"]
 
         if not pull_request_is_ready_for_review(args):
             return Success
 
         print("\nBuild results:\n\n")
         print(build_results + "\n\n")
+        print("Link to the PR:", args.pull_request_url)
 
         pr = get_pull_request_status(args)
         if changes_requested(args, pr):
             print("Changes requested by reviewers, skipping approval of the PR.")
+            # Ask if the build results should be added as a comment to the PR:
+            if args.yes or input("Add the build results as a comment to the PR [y/n]: ") == "y":
+                review_pr(args, "--comment", build_results)
 
-        print("Link to the PR:", args.pull_request_url)
+            return Success
+
+        print_reviewers(pr)
 
         # Check if the PR is really ready for approval before approving:
         # Ask for confirmation before approving the PR.
         target = "approval" if not changes_requested(args, pr) else "comment"
-        if (
-            args.yes
-            or not get_reviewers(pr, "APPROVED")
-            or input(f"Submit the build results as an {target} [y/n]: ") == "y"
-        ):
+        if args.yes or input(f"Submit the build results as an {target} [y/n]: ") == "y":
             option = "--approve" if not changes_requested(args, pr) else "--comment"
-            cmd = ["pr", "review", args.pull_request, option, "--body", build_results]
-            exitcode = spawn("gh", cmd, show_command=False)
+            exitcode = review_pr(args, option, build_results)
             if exitcode:
                 return exitcode
         else:
