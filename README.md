@@ -23,7 +23,7 @@ Quick start:
 
   ```py
   gh pr list -L42 --search 'review:required draft:false no:assignee -status:failure -label:changes-requested -label:waiting-on-maintainer -label:waiting-on-dependency -label:question updated:>=2024-05-01' >recent-pr-queue.txt
-  build-quality-tools/build_pr_changes.py -q recent-pr-queue.txt -mar
+  gh-spack-pr/build_pr_changes.py -q recent-pr-queue.txt -mar
   ```
 
   This will attempt to build all changed specs that were detected
@@ -88,6 +88,6 @@ selected PR, and starts a sub-shell.
 In the shell with the PR checked out, you can run
 [build_pr_changes.py](build_pr_changes.py) to build the PR and submit the results.
 
-See [gh-dash/README.md](gh-dash/README.md) for an introduction.
+See [cli-extensions/gh-dash/README.md](cli-extensions/gh-dash/README.md) for an introduction.
 
 <img src="https://user-images.githubusercontent.com/6196971/198704107-6775a0ba-669d-418b-9ae9-59228aaa84d1.gif">

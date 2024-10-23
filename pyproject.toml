@@ -1,6 +1,6 @@
 [project]
-name="build-quality-tools"
-description="build-quality-tools for the spack package manager"
+name="gh-spack-pr"
+description="Tools and GitHub CLI extension to build PRs for the spack package manager"
 dependencies=[
   "pexpect",
 ]
