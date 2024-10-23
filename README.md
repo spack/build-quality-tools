@@ -88,6 +88,6 @@ selected PR, and starts a sub-shell.
 In the shell with the PR checked out, you can run
 [build_pr_changes.py](build_pr_changes.py) to build the PR and submit the results.
 
-See [cli-extensions/gh-dash/README.md](cli-extensions/gh-dash/README.md) for an introduction.
+See [tools/gh-dash/README.md](cli-extensions/gh-dash/README.md) for an introduction.
 
 <img src="https://user-images.githubusercontent.com/6196971/198704107-6775a0ba-669d-418b-9ae9-59228aaa84d1.gif">
