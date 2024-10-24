@@ -28,6 +28,9 @@ from typing import Any, Dict, List, Tuple, TypeAlias
 from _vendor import pexpect
 
 ExitCode: TypeAlias = int
+Strs: TypeAlias = List[str]
+Fails: TypeAlias = List[Tuple[str, str]]
+
 Success: ExitCode = 0
 
 
@@ -86,7 +89,7 @@ def update_terminal_status_bar(message: str, args: List[str]) -> None:
     print(f"\033]0;{status}\007", end="")
 
 
-def spawn(command: str, args, logfile=None, **kwargs) -> ExitCode:
+def spawn(command: str, args: Strs, logfile=None, **kwargs) -> ExitCode:
     """Spawn a command with input and output passed through, with a pyt and exit code."""
 
     update_terminal_status_bar(command, args)
@@ -625,7 +628,7 @@ def get_specs_to_check(args) -> List[str]:
             continue
 
         if multiline_variant:
-            add_bool_variant(variant, new_variants, line)
+            add_bool_variant(multiline_variant, new_variants, line)
             if "    )" in line:
                 multiline_variant = None
             continue
@@ -1249,7 +1252,7 @@ def remove_long_strings(data: str) -> str:
 
 def remove_color_terminal_codes(data: str) -> str:
     """Remove color terminal codes from the output."""
-    return re.sub(r"\x1b\[[0-9;]*m", "", data)
+    return re.sub(r"\x1b\[\?2004l", "", re.sub(r"\x1b\[[0-9;\?l]*m", "", data))
 
 
 def abbreviated_spec_info(spec: str, spec_log_file: str) -> str:
@@ -1342,71 +1345,109 @@ def remove_too_verbose_output(abstract_spec_str: str) -> str:
     """Remove too verbose output from the abstract spec."""
 
     # Filter out the build system and build type from the output:
-    abstract_spec_str = abstract_spec_str.replace(" build_system=pip", "")
+    abstract_spec_str = abstract_spec_str.replace(" build_system=python_pip", "")
     abstract_spec_str = abstract_spec_str.replace(" build_system=perl", "")
+    abstract_spec_str = abstract_spec_str.replace(" build_system=cmake", "")
+    abstract_spec_str = abstract_spec_str.replace(" build_system=makefile", "")
+    abstract_spec_str = abstract_spec_str.replace(" build_system=generic", "")
     abstract_spec_str = abstract_spec_str.replace(" build_system=autotools", "")
     abstract_spec_str = abstract_spec_str.replace(" build_type=Release", "")
     abstract_spec_str = abstract_spec_str.replace(" generator=make", "")
+    abstract_spec_str = abstract_spec_str.replace(" generator=ninja", "")
+    abstract_spec_str = abstract_spec_str.replace("+pic", "")
+    abstract_spec_str = abstract_spec_str.replace("+shared", "")
+    abstract_spec_str = abstract_spec_str.replace("+", "")
+    abstract_spec_str = re.sub(" [a-z_-]+=none", "", abstract_spec_str)
+    abstract_spec_str = re.sub(" libs=[a-z,]+", "", abstract_spec_str)
+    abstract_spec_str = re.sub(" [a-z]+=default", "", abstract_spec_str)
+    abstract_spec_str = re.sub(" patches=[0-9a-f]+", "", abstract_spec_str)
+    abstract_spec_str = abstract_spec_str.replace("    ", "\t")
     # Remove disabled variants (words following ~) in the stdout:
     return re.sub(r"~[a-z0-9]+", "", abstract_spec_str)
 
 
-def spack_find_summary(spack_find_output: str) -> str:
+def spack_find_summary_new_root(line: str) -> str:
+    """Return the summary for a new root found by spack find."""
+    return (
+        "<li><details><summary>"
+        "Click on this area to unfold/refold the dependency report of this build:"
+        "\n\n>```py\n"  # Empty line is needed for the summary to work
+        + ">"
+        + line.replace(" build_system=python_pip", "")
+        + "\n>```\n</summary>\n\n"  # Empty line is needed for the summary to work
+        ">```py\n"
+    )
+
+
+def spack_find_summary_new_arch(arch: str) -> str:
+    """Return the summary for a new architecture found by spack find."""
+    return (
+        "<details><summary>"
+        "<b>Click here to show/hide the report on </b><tt>spack find</tt> for "
+        f"<tt>{arch}</tt>."
+        "</summary><ol>\n"
+    )
+
+
+def spack_find_summary(spack_find_output: str) -> List[str]:
     """Convert the spack find output to an HTML-like summary that can be expanded."""
-
-    details = " (disabled variants are removed for the make the list the dependencies brief)"
-    head = "<details><summary>Click on this area to unfold/refold the dependency report "
-    head += "of this build:\n\n\n```py\n"
-    html = ""
+    i = 0
+    html = [""]
     for line in spack_find_output.split("\n"):
-        cooked = remove_too_verbose_output(line)
-        if not cooked:
+        if not line:
+            end = ">```\n\n</details>\n\n"
+            if html[i][-len(end) :] != end:
+                html[i] += ">```\n\n</details>\n\n"
             continue
-        if line[:3] == "-- ":
-            # remove " -<any number of dashes>" from the end of the line:
-            html += "### Using " + re.sub(r" -+.*$", "", line[3:]) + ":\n"
+        line = remove_color_terminal_codes(line)
+        if "installed packages" in line:
             continue
-        if line[0] != " ":  # This is a build, add a summary for it
-            if not html or not html.endswith(":\n"):
-                html += "```\n</details>"
-            html += f"{head}{cooked}\n```\n</summary>\n\nDependency tree{details}:\n```py\n"
-            html += line + "\n"
-        else:
-            html += cooked + "\n"
-        if len(html) > 12000:
-            html += "... (truncated)\n"
-            break
-    return html + "```\n</details>\n\n"
+        if line[:3] == "-- ":  # New compiler group, add a section header for it
+            html.append(spack_find_summary_new_arch(re.sub(r" -+.*$", "", line[3:])))
+            i += 1
+            continue
+        if re.match(r"[a-z]", line[0]):  # This is a new root/explicit spec, add a summary for it
+            html.append(spack_find_summary_new_root(line))
+            i += 1
+            continue
+        html[i] += ">" + remove_too_verbose_output(line) + "\n"
+    return html
 
 
-def generate_build_results(installed, passed, fails, about_build_host) -> str:
-    """Generate a report in markdown format for cut-and-paste into the PR comment."""
+def generate_build_results(installed: Strs, passed: Strs, fails: Fails, about_build_host) -> str:
+    """Generate a report using GitHub markdown format for cut-and-paste into the PR comment."""
 
-    msg = f"Build results[^1]{about_build_host}:\n"
-    msg += "These changed specs were found `gh pr diff`:\n"
+    base = "`spack install` on the changed recipes of this PR was "
+    stat = "successful" if not fails else "not successful"
+    head = f"{base}{stat}[^1]{about_build_host}!"
+    clk = f"<b>Click here for a summary of the {stat} builds.</b>"
+    msg = f"{head}<details><summary>{clk}</summary>\n"
+    msg += "These changed specs were found using [gh pr diff](https://cli.github.com):\n"
     msg += "- `" + "`\n- `".join(installed + passed) + "`\n\n"
 
     if installed or passed:
-        msg += "The following specs were built (or installed) to check this PR:\n"
-        # build_results += "```py\n"
-        cmd = ["bin/spack", "find", "--deps", "--variants", *(installed + passed)]
-        # build_results += " ".join(cmd) + "\n```\n"
-        # build_results += " | sed 's/~[a-z]*//g;s/ [a-z0-9_]*=[a-zA-Z0-9]*//g'\n```\n"
-        err, stdout, stderr = run(cmd)
+        expected_specs = installed + passed
+        args = ["find", "--deps", "--variants"]
+        print("Expected specs:", " ".join(expected_specs))
+        logfile = BytesIO()
+        err = spawn("bin/spack", args + expected_specs, logfile=logfile)
+        logfile.seek(0)  # Reset the file pointer to the beginning of the file.
         if err:
-            msg += stderr or stdout
+            msg += logfile.read().decode("utf-8")[-1000:]
         else:
-            msg += spack_find_summary(stdout)
+            msg += "\n".join(spack_find_summary(logfile.read().decode("utf-8")))
 
     msg += failure_summary(fails)
+    msg += "\n\n</details>\n\n"
     if fails:
         msg += (
             "\nThis report was generated by a script that is a work-in-progress.\n"
-            "If this found a real issue, please fix it and push the changes.\n\n"
+            "If it found a real issue, please fix it and push the changes.\n\n"
         )
     # Add the footnote about the script used to generate the report:
-    cli = "[^1]: Generated using the [GitHub CLI](https://cli.github.com/)"
-    return msg + cli + " and https://github.com/spack/gh-spack-pr"
+    ext = "[github.com/spack/gh-spack-pr](https://github.com/spack/gh-spack-pr)"
+    cli = f"[^1]: Orchestrated using `spack install` by {ext} "
+    return msg + cli + "and the [GitHub CLI](https://cli.github.com/)\n</details>"
 
 
 def check_diff_and_commit(args):
